@@ -1,0 +1,23 @@
+[package]
+name = "ibtc_cairo"
+version = "0.1.0"
+edition = "2023_10"
+
+# See more keys and their definitions at https://docs.swmansion.com/scarb/docs/reference/manifest.html
+
+[dependencies]
+starknet = "2.9.2"
+openzeppelin = "0.20.0"
+
+[dev-dependencies]
+snforge_std = "0.34.0"
+openzeppelin_testing = "0.20.0"
+cairo_test = "2.9.2"
+
+[profile.dev.cairo]
+unstable-add-statements-code-locations-debug-info = true
+unstable-add-statements-functions-debug-info = true
+
+[[target.starknet-contract]]
+sierra = true
+casm = true

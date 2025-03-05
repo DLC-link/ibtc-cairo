@@ -1,0 +1,3 @@
+[sncast.default]
+url = "http://127.0.0.1:5050"
+keystore = "~/.starkli-wallets/deployer/keystore.json"
