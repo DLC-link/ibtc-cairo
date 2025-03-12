@@ -3,6 +3,6 @@ target/
 .snfoundry_cache/
 .snfoundry_versioned_programs/
 snfoundry_trace/
-scripts/keystore.json
-scripts/account.json
+bash_scripts/keystore.json
+bash_scripts/account.json
 deployment_*.json
