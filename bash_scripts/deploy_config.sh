@@ -7,10 +7,11 @@ export STARKNET_KEYSTORE="./keystore.json"
 # Network configurations
 TESTNET_RPC="https://starknet-sepolia.public.blastapi.io/rpc/v0_7"
 MAINNET_RPC="https://starknet-mainnet.public.blastapi.io/rpc/v0_7"
+DEVNET_RPC="http://localhost:5050"
 
-# Default to testnet
-NETWORK="testnet"
-STARKNET_RPC=$TESTNET_RPC
+# Default to devnet
+NETWORK="devnet"
+STARKNET_RPC=$DEVNET_RPC
 
 # Contract addresses (to be populated during deployment)
 IBTC_TOKEN_ADDRESS=""

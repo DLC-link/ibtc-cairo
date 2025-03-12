@@ -9,6 +9,8 @@ source "$SCRIPT_DIR/deploy_config.sh"
 
 # set -x
 
+SALT=0
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -65,9 +67,15 @@ done
 if [ "$NETWORK" = "mainnet" ]; then
     export STARKNET_RPC=$MAINNET_RPC
     print_step "Using Mainnet configuration"
-else
+elif [ "$NETWORK" = "testnet" ]; then
     export STARKNET_RPC=$TESTNET_RPC
     print_step "Using Testnet configuration"
+elif [ "$NETWORK" = "devnet" ]; then
+    export STARKNET_RPC=$DEVNET_RPC
+    print_step "Using Devnet configuration"
+else
+    print_error "Invalid network. Please use 'mainnet', 'testnet', or 'devnet'"
+    exit 1
 fi
 
 # Setup account and keystore if not exists
@@ -110,12 +118,12 @@ declare_contracts() {
     
     # Declare IBTCToken
     print_step "Declaring IBTCToken..."
-    IBTC_TOKEN_CLASS_HASH=$(starkli declare "$PROJECT_ROOT/target/dev/ibtc_cairo_IBTCToken.contract_class.json")
+    IBTC_TOKEN_CLASS_HASH=$(starkli declare "$PROJECT_ROOT/target/dev/ibtc_cairo_IBTCToken.contract_class.json" --strk)
     print_success "IBTCToken declared with class hash: $IBTC_TOKEN_CLASS_HASH"
     
     # Declare IBTCManager
     print_step "Declaring IBTCManager..."
-    IBTC_MANAGER_CLASS_HASH=$(starkli declare "$PROJECT_ROOT/target/dev/ibtc_cairo_IBTCManager.contract_class.json")
+    IBTC_MANAGER_CLASS_HASH=$(starkli declare "$PROJECT_ROOT/target/dev/ibtc_cairo_IBTCManager.contract_class.json" --strk)
     print_success "IBTCManager declared with class hash: $IBTC_MANAGER_CLASS_HASH"
 }
 
@@ -127,7 +135,8 @@ deploy_contracts() {
     print_step "Deploying IBTCToken..."
     if DEPLOY_OUTPUT=$(starkli deploy $IBTC_TOKEN_CLASS_HASH \
         $ACCOUNT_ADDRESS \
-        --salt=0 2>&1); then
+        --strk \
+        --salt=$SALT 2>&1); then
         IBTC_TOKEN_ADDRESS=$(echo "$DEPLOY_OUTPUT" | tail -n 1)
         print_success "IBTCToken deployed at: $IBTC_TOKEN_ADDRESS"
     else
@@ -160,7 +169,8 @@ deploy_contracts() {
         3 \
         $IBTC_TOKEN_ADDRESS \
         0x000001 \
-        --salt=0 2>&1); then
+        --strk \
+        --salt=$SALT 2>&1); then
         IBTC_MANAGER_ADDRESS=$(echo "$DEPLOY_OUTPUT" | tail -n 1)
         print_success "IBTCManager deployed at: $IBTC_MANAGER_ADDRESS"
     else

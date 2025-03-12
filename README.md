@@ -19,18 +19,56 @@ scarb build
 snforge test
 ```
 
+## Running in Dev Container (easiest way)
+
+Open the project in a dev container with the configuration at `.devcontainer.json`. This container already has scarb, starkli, and starknet-devnet installed.
+
+```json
+{
+    "name": "dev",
+    "image": "starknetfoundation/starknet-dev:2.9.2",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "StarkWare.cairo1",
+                "tamasfe.even-better-toml"
+            ]
+        }
+    },
+    "forwardPorts": [
+        5050
+    ]
+}
+```
+
+Open the first terminal tab and run the starknet-devnet
+```
+starknet-devnet --seed 0
+```
+
+Open the second terminal tab and run the deploy script (run with the first account in the devnet's account list)
+```bash
+scarb build
+snforge test
+
+cd bash_scripts/
+./deploy.sh --account-address 0x064b48806902a367c8598f4f95c305e8c1a1acba5f082d294a43793113115691 --skip-build
+
+# input the private key of the first account in the devnet's account list when prompted
+```
+
 ## Contracts
 
-### IBTCManager
-The main contract that manages iBTC vaults. It handles:
+### DLCManager
+The main contract that manages DLCs. It handles:
 - Vault creation and management
-- Vault status tracking
+- DLC status tracking
 - Whitelisting
 - Admin controls
 - Multi-signature verification
 
-### IBTCToken
-An ERC20 token contract representing wrapped BTC in the iBTC system. Features:
+### DLCBTC
+An ERC20 token contract representing wrapped BTC in the DLC system. Features:
 - Minting/burning capabilities
 - Role-based access control
 - Configurable minter/burner roles
