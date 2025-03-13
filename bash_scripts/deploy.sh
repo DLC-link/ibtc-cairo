@@ -59,6 +59,18 @@ while [[ $# -gt 0 ]]; do
             SKIP_BUILD=true
             shift
             ;;
+        --starknet-account)
+            STARKNET_ACCOUNT="$2"
+            shift 2
+            ;;
+        --starknet-keystore)
+            STARKNET_KEYSTORE="$2"
+            shift 2
+            ;;
+        --rpc-url)
+            export STARKNET_RPC="$2"
+            shift 2
+            ;;
         *)
             print_error "Unknown argument $1"
             exit 1
@@ -81,21 +93,31 @@ else
     exit 1
 fi
 
+# Function to determine which signer flags to use
+get_signer_flags() {
+    # If PRIVATE_KEY environment variable is set, use it directly
+    if [ -n "$PRIVATE_KEY" ]; then
+        echo "--private-key $PRIVATE_KEY --strk"
+    else
+        echo "--strk"
+    fi
+}
+
 # Setup account and keystore if not exists
 setup_account() {
     print_step "Setting up account and keystore..."
-    
+
     if [ ! -f "$STARKNET_ACCOUNT" ]; then
         if [ -z "$ACCOUNT_ADDRESS" ]; then
             print_error "Account address is required. Please provide it with --account-address"
             exit 1
         fi
-        
+
         print_step "Fetching account..."
-        starkli account fetch $ACCOUNT_ADDRESS --output=$STARKNET_ACCOUNT
+        starkli account fetch $ACCOUNT_ADDRESS --output=$STARKNET_ACCOUNT --rpc $STARKNET_RPC
     fi
 
-    if [ ! -f "$STARKNET_KEYSTORE" ]; then
+    if [ ! -f "$STARKNET_KEYSTORE" ] && [ -z "$PRIVATE_KEY" ]; then
         print_step "Creating keystore..."
         starkli signer keystore from-key $STARKNET_KEYSTORE
     fi
@@ -104,7 +126,11 @@ setup_account() {
 # Declare contracts
 declare_contracts() {
     print_step "Declaring contracts..."
-    
+
+    # Get the appropriate signer flags based on available credentials
+    SIGNER_FLAGS=$(get_signer_flags)
+    echo "Using signer flags: $SIGNER_FLAGS"
+
     # Build contracts first if not skipped
     if [ "$SKIP_BUILD" != "true" ]; then
         print_step "Building contracts..."
@@ -112,33 +138,38 @@ declare_contracts() {
     else
         print_step "Skipping contract build..."
     fi
-    
+
     # Check if contract artifacts exist
     if [ ! -f "$PROJECT_ROOT/target/dev/ibtc_cairo_IBTCToken.contract_class.json" ] || [ ! -f "$PROJECT_ROOT/target/dev/ibtc_cairo_IBTCManager.contract_class.json" ]; then
         print_error "Contract artifacts not found. Please build contracts first or remove --skip-build option"
         exit 1
     fi
-    
+
     # Declare IBTCToken
     print_step "Declaring IBTCToken..."
-    IBTC_TOKEN_CLASS_HASH=$(starkli declare "$PROJECT_ROOT/target/dev/ibtc_cairo_IBTCToken.contract_class.json" --strk --gas 99000)
+    IBTC_TOKEN_CLASS_HASH=$(starkli declare "$PROJECT_ROOT/target/dev/ibtc_cairo_IBTCToken.contract_class.json" $SIGNER_FLAGS --watch --rpc $STARKNET_RPC --gas 99000)
     print_success "IBTCToken declared with class hash: $IBTC_TOKEN_CLASS_HASH"
-    
+
     # Declare IBTCManager
     print_step "Declaring IBTCManager..."
-    IBTC_MANAGER_CLASS_HASH=$(starkli declare "$PROJECT_ROOT/target/dev/ibtc_cairo_IBTCManager.contract_class.json" --strk --gas 99000)
+    IBTC_MANAGER_CLASS_HASH=$(starkli declare "$PROJECT_ROOT/target/dev/ibtc_cairo_IBTCManager.contract_class.json" $SIGNER_FLAGS --watch --rpc $STARKNET_RPC --gas 99000)
     print_success "IBTCManager declared with class hash: $IBTC_MANAGER_CLASS_HASH"
 }
 
 # Deploy contracts
 deploy_contracts() {
     print_step "Deploying contracts..."
-    
+
+    # Get the appropriate signer flags based on available credentials
+    SIGNER_FLAGS=$(get_signer_flags)
+
     # Deploy IBTCToken
     print_step "Deploying IBTCToken..."
     if DEPLOY_OUTPUT=$(starkli deploy $IBTC_TOKEN_CLASS_HASH \
         $ACCOUNT_ADDRESS \
-        --strk \
+        $SIGNER_FLAGS \
+        --watch \
+        --rpc $STARKNET_RPC \
         --salt=$SALT 2>&1); then
         IBTC_TOKEN_ADDRESS=$(echo "$DEPLOY_OUTPUT" | tail -n 1)
         print_success "IBTCToken deployed at: $IBTC_TOKEN_ADDRESS"
@@ -163,7 +194,7 @@ deploy_contracts() {
             exit 1
         fi
     fi
-    
+
     # Deploy IBTCManager with constructor arguments
     print_step "Deploying IBTCManager..."
     if DEPLOY_OUTPUT=$(starkli deploy $IBTC_MANAGER_CLASS_HASH \
@@ -172,7 +203,9 @@ deploy_contracts() {
         3 \
         $IBTC_TOKEN_ADDRESS \
         0x000001 \
-        --strk \
+        $SIGNER_FLAGS \
+        --watch \
+        --rpc $STARKNET_RPC \
         --salt=$SALT 2>&1); then
         IBTC_MANAGER_ADDRESS=$(echo "$DEPLOY_OUTPUT" | tail -n 1)
         print_success "IBTCManager deployed at: $IBTC_MANAGER_ADDRESS"
@@ -202,20 +235,20 @@ deploy_contracts() {
 # Verify deployments
 verify_deployment() {
     print_step "Verifying deployments..."
-    
+
     # Verify IBTCToken
     print_step "Verifying IBTCToken..."
-    starkli call $IBTC_TOKEN_ADDRESS name
-    
+    starkli call $IBTC_TOKEN_ADDRESS name --rpc $STARKNET_RPC
+
     # Verify IBTCManager
     print_step "Verifying IBTCManager..."
-    starkli call $IBTC_MANAGER_ADDRESS get_threshold
+    starkli call $IBTC_MANAGER_ADDRESS get_threshold --rpc $STARKNET_RPC
 }
 
 # Save deployment addresses
 save_deployment() {
     print_step "Saving deployment addresses..."
-    
+
     cat > "$SCRIPT_DIR/deployment_$NETWORK.json" << EOF
 {
     "network": "$NETWORK",
@@ -240,7 +273,7 @@ main() {
     # deploy_contracts
     verify_deployment
     # save_deployment
-    
+
     print_success "Deployment completed successfully!"
 }
 
