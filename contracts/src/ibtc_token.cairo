@@ -2,7 +2,7 @@
 // Compatible with OpenZeppelin Contracts for Cairo ^0.20.0
 
 #[starknet::contract]
-mod IBTCToken {
+pub mod IBTCToken {
     use openzeppelin::access::ownable::OwnableComponent;
     use openzeppelin::token::erc20::{ERC20Component, ERC20HooksEmptyImpl};
     use openzeppelin::upgrades::UpgradeableComponent;

@@ -4,7 +4,7 @@ pub const APPROVED_SIGNER: felt252 = selector!("APPROVED_SIGNER");
 pub const DEFAULT_ADMIN_ROLE: felt252 = selector!("DEFAULT_ADMIN_ROLE");
 
 #[starknet::contract]
-mod IBTCManager {
+pub mod IBTCManager {
     use core::iter::IntoIterator;
     use openzeppelin::access::accesscontrol::AccessControlComponent;
     use openzeppelin::access::accesscontrol::interface::IAccessControl;

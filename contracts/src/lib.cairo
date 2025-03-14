@@ -5,3 +5,6 @@ mod event;
 mod ibtc_library;
 mod utils;
 mod mocks;
+
+pub use ibtc_manager::IBTCManager;
+pub use ibtc_token::IBTCToken;

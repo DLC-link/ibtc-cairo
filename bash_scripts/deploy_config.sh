@@ -1,9 +1,5 @@
 #!/bin/bash
 
-# Configuration file for deployment
-export STARKNET_ACCOUNT="./account.json"
-export STARKNET_KEYSTORE="./keystore.json"
-
 # Network configurations
 TESTNET_RPC="https://starknet-sepolia.public.blastapi.io/rpc/v0_7"
 MAINNET_RPC="https://starknet-mainnet.public.blastapi.io/rpc/v0_7"

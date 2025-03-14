@@ -2,10 +2,13 @@
 
 # Get script directory
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." &> /dev/null && pwd )"
+PROJECT_ROOT="$( cd "$SCRIPT_DIR/../contracts" &> /dev/null && pwd )"
 
 # Source configuration
 source "$SCRIPT_DIR/deploy_config.sh"
+
+export STARKNET_ACCOUNT="$SCRIPT_DIR/account.json"
+export STARKNET_KEYSTORE="$SCRIPT_DIR/keystore.json"
 
 # set -x
 
@@ -118,12 +121,12 @@ declare_contracts() {
     
     # Declare IBTCToken
     print_step "Declaring IBTCToken..."
-    IBTC_TOKEN_CLASS_HASH=$(starkli declare "$PROJECT_ROOT/target/dev/ibtc_cairo_IBTCToken.contract_class.json" --strk)
+    IBTC_TOKEN_CLASS_HASH=$(starkli declare "$PROJECT_ROOT/target/dev/ibtc_cairo_IBTCToken.contract_class.json" --strk --gas 99000)
     print_success "IBTCToken declared with class hash: $IBTC_TOKEN_CLASS_HASH"
     
     # Declare IBTCManager
     print_step "Declaring IBTCManager..."
-    IBTC_MANAGER_CLASS_HASH=$(starkli declare "$PROJECT_ROOT/target/dev/ibtc_cairo_IBTCManager.contract_class.json" --strk)
+    IBTC_MANAGER_CLASS_HASH=$(starkli declare "$PROJECT_ROOT/target/dev/ibtc_cairo_IBTCManager.contract_class.json" --strk --gas 99000)
     print_success "IBTCManager declared with class hash: $IBTC_MANAGER_CLASS_HASH"
 }
 
@@ -213,7 +216,7 @@ verify_deployment() {
 save_deployment() {
     print_step "Saving deployment addresses..."
     
-    cat > "$PROJECT_ROOT/deployment_$NETWORK.json" << EOF
+    cat > "$SCRIPT_DIR/deployment_$NETWORK.json" << EOF
 {
     "network": "$NETWORK",
     "ibtc_token": {
@@ -233,10 +236,10 @@ EOF
 # Main deployment flow
 main() {
     setup_account
-    declare_contracts
-    deploy_contracts
+    # declare_contracts
+    # deploy_contracts
     verify_deployment
-    save_deployment
+    # save_deployment
     
     print_success "Deployment completed successfully!"
 }

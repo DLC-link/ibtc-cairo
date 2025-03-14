@@ -46,15 +46,32 @@ Open the first terminal tab and run the starknet-devnet
 starknet-devnet --seed 0
 ```
 
-Open the second terminal tab and run the deploy script (run with the first account in the devnet's account list)
+Open the second terminal tab and run the deploy script (update the account info the `.env` file)
 ```bash
-scarb build
-snforge test
+cd scripts/
+yarn
+node deploy.js [devnet|testnet|mainnet]?
+```
 
+## Using sncast script (deprecated)
+
+Import the first account in the devnet's account list to the sncast profile.
+```bash
 cd bash_scripts/
-./deploy.sh --account-address 0x064b48806902a367c8598f4f95c305e8c1a1acba5f082d294a43793113115691 --skip-build
+sncast \
+    account import \
+    --url http://127.0.0.1:5050/rpc \
+    --name devnet-account \
+    --add-profile dev \
+    --address 0x064b48806902a367c8598f4f95c305e8c1a1acba5f082d294a43793113115691 \
+    --private-key 0x0000000000000000000000000000000071d7bb07b9a64f6f78ac4c816aff4da9 \
+    --type oz
+```
 
-# input the private key of the first account in the devnet's account list when prompted
+Run the deploy script with the sncast profile
+```bash
+cd bash_scripts/
+sncast --profile dev script run ibtc_deploy_script
 ```
 
 ## Contracts

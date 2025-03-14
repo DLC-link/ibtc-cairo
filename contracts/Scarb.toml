@@ -6,13 +6,13 @@ edition = "2023_10"
 # See more keys and their definitions at https://docs.swmansion.com/scarb/docs/reference/manifest.html
 
 [dependencies]
-starknet = "2.9.2"
-openzeppelin = "0.20.0"
+starknet = "2.9.4"
+openzeppelin = "1.0.0"
 
 [dev-dependencies]
-snforge_std = "0.34.0"
-openzeppelin_testing = "0.20.0"
-cairo_test = "2.9.2"
+snforge_std = "0.34.0" # this is required by openzeppelin package
+openzeppelin_testing = "1.0.0"
+cairo_test = "2.9.4"
 
 [profile.dev.cairo]
 unstable-add-statements-code-locations-debug-info = true
@@ -21,3 +21,5 @@ unstable-add-statements-functions-debug-info = true
 [[target.starknet-contract]]
 sierra = true
 casm = true
+
+[lib]
