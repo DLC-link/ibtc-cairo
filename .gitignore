@@ -1,8 +1,13 @@
-target/
 .idea/
 .snfoundry_cache/
 .snfoundry_versioned_programs/
 snfoundry_trace/
-bash_scripts/keystore.json
-bash_scripts/account.json
+keystore.json
+account.json
 deployment_*.json
+declaration_*.json
+node_modules/
+.env
+.cursor/
+.vscode/
+target/

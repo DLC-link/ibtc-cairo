@@ -26,7 +26,7 @@ Open the project in a dev container with the configuration at `.devcontainer.jso
 ```json
 {
     "name": "dev",
-    "image": "starknetfoundation/starknet-dev:2.9.2",
+    "image": "starknetfoundation/starknet-dev:2.9.4",
     "customizations": {
         "vscode": {
             "extensions": [
@@ -51,6 +51,11 @@ Open the second terminal tab and run the deploy script (update the account info 
 cd scripts/
 yarn
 node deploy.js [devnet|testnet|mainnet]?
+```
+
+To run some basic tests (testing upgrades)
+```bash
+node basic-test.js [devnet|testnet|mainnet]?
 ```
 
 ## Using sncast script (deprecated)

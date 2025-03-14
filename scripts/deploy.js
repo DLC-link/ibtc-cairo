@@ -1,67 +1,22 @@
-import { Provider, Account, Contract, json, constants } from "starknet";
+import { Contract, json } from "starknet";
 import fs from "fs";
 import path from "path";
-import dotenv from "dotenv";
 import { fileURLToPath } from "url";
+import { log, setupProvider, setupAccount } from "./utils.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load environment variables
-dotenv.config();
-
-// Network configurations
-const NETWORKS = {
-    mainnet: {
-        name: "mainnet",
-        rpc: process.env.MAINNET_RPC || "https://starknet-mainnet.public.blastapi.io"
-    },
-    testnet: {
-        name: "testnet",
-        rpc: process.env.TESTNET_RPC || "https://starknet-testnet.public.blastapi.io"
-    },
-    devnet: {
-        name: "devnet",
-        rpc: process.env.DEVNET_RPC || "http://127.0.0.1:5050"
-    }
-};
-
 // Constants
-const SALT = "0x0";
+const SALT = "0x1";
 const BTC_FEE_RECIPIENT = "0x000001";
 const THRESHOLD = 3;
-
-// Helper functions
-const log = {
-    step: (msg) => console.log("\x1b[33m[STEP]\x1b[0m", msg),
-    success: (msg) => console.log("\x1b[32m[SUCCESS]\x1b[0m", msg),
-    error: (msg) => console.log("\x1b[31m[ERROR]\x1b[0m", msg)
-};
-
-async function setupProvider(network) {
-    const networkConfig = NETWORKS[network];
-    if (!networkConfig) {
-        throw new Error(`Invalid network. Please use 'mainnet', 'testnet', or 'devnet'`);
-    }
-
-    log.step(`Using ${networkConfig.name} configuration`);
-    return new Provider({ nodeUrl: networkConfig.rpc });
-}
-
-async function setupAccount(provider, accountAddress, privateKey) {
-    if (!accountAddress || !privateKey) {
-        throw new Error("Account address and private key are required");
-    }
-
-    log.step("Setting up account...");
-    return new Account(provider, accountAddress, privateKey, undefined, constants.TRANSACTION_VERSION.V3);
-}
 
 async function declareContracts(account, contractPaths) {
     log.step("Declaring contracts...");
 
     const declarations = {};
-    
+
     for (const [name, path] of Object.entries(contractPaths)) {
         log.step(`Declaring ${name}...`);
         try {
@@ -71,13 +26,13 @@ async function declareContracts(account, contractPaths) {
                 contract: contractClass,
                 casm: compiledContractClass
             });
-            
+
             await account.waitForTransaction(declareResponse.transaction_hash);
             declarations[name] = {
                 classHash: declareResponse.class_hash,
                 tx: declareResponse.transaction_hash
             };
-            
+
             log.success(`${name} declared with class hash: ${declareResponse.class_hash}`);
         } catch (error) {
             let isAlreadyDeclared = error?.baseError?.data?.execution_error?.includes(" is already declared");
@@ -90,11 +45,11 @@ async function declareContracts(account, contractPaths) {
             }
         }
     }
-
+    declarations.timestamp = new Date().toISOString();
     return declarations;
 }
 
-async function deployContracts(account, declarations) {
+async function deployContracts(account, declarations, provider) {
     log.step("Deploying contracts...");
 
     const deployments = {};
@@ -104,7 +59,7 @@ async function deployContracts(account, declarations) {
     try {
         const tokenDeployResponse = await account.deployContract({
             classHash: declarations.IBTCToken.classHash,
-            constructorCalldata: [account.address],
+            constructorCalldata: [account.address], // default owner
             salt: SALT
         });
         await account.waitForTransaction(tokenDeployResponse.transaction_hash);
@@ -149,6 +104,7 @@ async function deployContracts(account, declarations) {
             address: managerAddress,
             classHash: declarations.IBTCManager.classHash
         };
+        deployments.timestamp = new Date().toISOString();
     } catch (err) {
         let isAlreadyDeployed = err?.baseError?.data?.execution_error?.includes("contract already deployed at address");
         if (isAlreadyDeployed) {
@@ -161,6 +117,24 @@ async function deployContracts(account, declarations) {
         } else {
             throw err;
         }
+    }
+
+    // transfer ownership of IBTCToken to IBTCManager
+    log.step("Transferring ownership of IBTCToken to IBTCManager...");
+    try {
+        const tokenContract = new Contract(
+            json.parse(fs.readFileSync("../contracts/target/dev/ibtc_cairo_IBTCToken.contract_class.json").toString("ascii")).abi,
+            deployments.IBTCToken.address,
+            provider
+        );
+        const transferOwnershipCall = tokenContract.populate("transfer_ownership", {
+            new_owner: deployments.IBTCManager.address
+        });
+        const { transaction_hash } = await account.execute(transferOwnershipCall);
+        await provider.waitForTransaction(transaction_hash);
+        log.success(`Ownership transferred, tx: ${transaction_hash}`);
+    } catch (err) {
+        log.error(`Failed to transfer ownership of IBTCToken to IBTCManager: ${err.message}`);
     }
 
     return deployments;
@@ -188,27 +162,23 @@ async function verifyDeployment(provider, deployments) {
     );
     const threshold = await managerContract.get_threshold();
     log.success(`IBTCManager threshold: ${threshold}`);
+
+    // Verify IBTCManager is the owner of IBTCToken
+    log.step("Verifying IBTCManager is the owner of IBTCToken...");
+    const tokenOwner = await tokenContract.owner();
+    log.success(`IBTCToken owner: ${tokenOwner}, IBTCManager: ${deployments.IBTCManager.address}`);
 }
 
-async function saveDeployment(network, declarations, deployments) {
-    log.step("Saving deployment addresses...");
-    
-    const deployment = {
-        network,
-        ibtc_token: {
-            address: deployments.IBTCToken.address,
-            class_hash: declarations.IBTCToken.classHash
-        },
-        ibtc_manager: {
-            address: deployments.IBTCManager.address,
-            class_hash: declarations.IBTCManager.classHash
-        },
-        timestamp: new Date().toISOString()
-    };
+async function saveDeployment(network, deployments, declarations) {
+    log.step("Saving declarations...");
+    const declarationPath = path.join(__dirname, `declaration_${network}.json`);
+    fs.writeFileSync(declarationPath, JSON.stringify(declarations, null, 2));
+    log.success(`Declarations saved to ${declarationPath}`);
 
+    log.step("Saving deployment addresses...");
     const deploymentPath = path.join(__dirname, `deployment_${network}.json`);
-    fs.writeFileSync(deploymentPath, JSON.stringify(deployment, null, 2));
-    log.success(`Deployment addresses saved to deployment_${network}.json`);
+    fs.writeFileSync(deploymentPath, JSON.stringify(deployments, null, 2));
+    log.success(`Deployment addresses saved to ${deploymentPath}`);
 }
 
 async function main() {
@@ -231,14 +201,18 @@ async function main() {
             IBTCManager: {
                 contractClass: path.join(__dirname, "../contracts/target/dev/ibtc_cairo_IBTCManager.contract_class.json"),
                 compiledContractClass: path.join(__dirname, "../contracts/target/dev/ibtc_cairo_IBTCManager.compiled_contract_class.json")
+            },
+            IBTCManagerMock: {
+                contractClass: path.join(__dirname, "../contracts/target/dev/ibtc_cairo_IBTCManagerMock.contract_class.json"),
+                compiledContractClass: path.join(__dirname, "../contracts/target/dev/ibtc_cairo_IBTCManagerMock.compiled_contract_class.json")
             }
         };
 
         // Deploy flow
         const declarations = await declareContracts(account, contractPaths);
-        const deployments = await deployContracts(account, declarations);
+        const deployments = await deployContracts(account, declarations, provider);
         await verifyDeployment(provider, deployments);
-        await saveDeployment(network, declarations, deployments);
+        await saveDeployment(network, deployments, declarations);
 
         log.success("Deployment completed successfully!");
     } catch (error) {
