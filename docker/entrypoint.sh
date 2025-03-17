@@ -28,25 +28,20 @@ done
 
 echo "Starknet Devnet started successfully on 0.0.0.0:5050"
 
-# Ensure needed files/directories exist with proper permissions
-chmod 755 /app/docker/account.json || true
-chmod 755 /app/docker/keystore.json || true
-chmod +x /app/bash_scripts/*.sh
+# Set up environment variables for Node.js deployment
+ACCOUNT_ADDRESS="0x064b48806902a367c8598f4f95c305e8c1a1acba5f082d294a43793113115691"
+PRIVATE_KEY="0x0000000000000000000000000000000071d7bb07b9a64f6f78ac4c816aff4da9"
 
-# Set up environment variables for starkli
-export STARKNET_RPC="http://127.0.0.1:5050"
-export STARKNET_ACCOUNT="/app/docker/account.json"
-export STARKNET_KEYSTORE="/app/docker/keystore.json"
-export PRIVATE_KEY="0x0000000000000000000000000000000071d7bb07b9a64f6f78ac4c816aff4da9" # Dev account 1
-export STARKLI_NO_PLAIN_KEY_WARNING=true
+# Create .env file for deployment script
+cat > /app/scripts/.env << EOL
+STARKNET_ACCOUNT_ADDRESS=${ACCOUNT_ADDRESS}
+STARKNET_PRIVATE_KEY=${PRIVATE_KEY}
+DEVNET_RPC=http://127.0.0.1:5050
+EOL
 
-echo "Running deployment script..."
+echo "Running Node.js deployment script..."
 
-cd /app/bash_scripts && ./deploy.sh \
-  --account-address 0x064b48806902a367c8598f4f95c305e8c1a1acba5f082d294a43793113115691 \
-  --skip-build \
-  --starknet-account /app/docker/account.json \
-  --starknet-keystore /app/docker/keystore.json \
+cd /app/scripts && node deploy.js devnet
 
 echo "Deployment completed. Container will continue running..."
 
