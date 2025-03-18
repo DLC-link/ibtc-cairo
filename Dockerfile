@@ -35,9 +35,9 @@ WORKDIR /app
 
 # Install Node.js (minimal runtime)
 RUN apt-get update && apt-get install -y \
-    nodejs \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+  nodejs \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
 
 # Copy Docker files
 COPY docker /app/docker
@@ -48,7 +48,9 @@ COPY --from=cairo-builder /build/contracts /app/contracts
 # Copy JS files and production dependencies from js-builder
 COPY --from=js-builder /build/scripts /app/scripts
 
-# Make scripts executable
+COPY ./docker/check-service.sh /check-service.sh
+
+RUN chmod +x /check-service.sh
 RUN chmod 755 /app/docker/entrypoint.sh
 
 # Make sure line endings are correct
