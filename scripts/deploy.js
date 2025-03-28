@@ -6,6 +6,7 @@ import { log, setupProvider, setupAccount } from "./utils.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const __deployments = path.join(__dirname, "../deployments"); 
 
 // Constants
 const SALT = "0x1";
@@ -171,12 +172,12 @@ async function verifyDeployment(provider, deployments) {
 
 async function saveDeployment(network, deployments, declarations) {
     log.step("Saving declarations...");
-    const declarationPath = path.join(__dirname, `declaration_${network}.json`);
+    const declarationPath = path.join(  __deployments, `declaration_${network}.json`);
     fs.writeFileSync(declarationPath, JSON.stringify(declarations, null, 2));
     log.success(`Declarations saved to ${declarationPath}`);
 
     log.step("Saving deployment addresses...");
-    const deploymentPath = path.join(__dirname, `deployment_${network}.json`);
+    const deploymentPath = path.join(__deployments, `deployment_${network}.json`);
     fs.writeFileSync(deploymentPath, JSON.stringify(deployments, null, 2));
     log.success(`Deployment addresses saved to ${deploymentPath}`);
 }

@@ -6,9 +6,10 @@ import { log, setupProvider, setupAccount } from "./utils.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const __deployments = path.join(__dirname, "../deployments"); 
 
 function getDeployedContracts(network, provider) {
-    const deploymentPath = path.join(__dirname, `deployment_${network}.json`);
+    const deploymentPath = path.join(__deployments, `deployment_${network}.json`);
     const deployments = JSON.parse(fs.readFileSync(deploymentPath).toString("ascii"));
 
     const tokenContract = new Contract(
