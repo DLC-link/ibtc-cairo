@@ -80,7 +80,7 @@ pub mod IBTCManager {
         whitelisted_addresses: Map<ContractAddress, bool>,
         btc_mint_fee_rate: u16,
         btc_redeem_fee_rate: u16,
-        btc_fee_recipient: felt252,
+        btc_fee_recipient: ByteArray,
         seen_signers: Map<(ContractAddress, felt252), bool>,
         ibtc_vaults: Map<u128, IBTCVault>,
         ibtc_vault_ids_by_uuid: Map<felt252, u128>,
@@ -88,7 +88,7 @@ pub mod IBTCManager {
         signer_count: u16,
         por_enabled: bool,
         total_value_minted: u256,
-        attestor_group_pubkey: felt252,
+        attestor_group_pubkey: ByteArray,
         ibtc_por_feed: ContractAddress,
     }
 
@@ -165,7 +165,7 @@ pub mod IBTCManager {
         ibtc_admin_role: ContractAddress,
         threshold: u16,
         token_contract: ContractAddress,
-        btc_fee_recipient_to_set: felt252,
+        btc_fee_recipient_to_set: ByteArray,
     ) {
         self.accesscontrol.initializer();
         // Grant roles
@@ -364,9 +364,9 @@ pub mod IBTCManager {
                 status: IBTCVaultStatus::READY.into(),
                 funding_tx_id: 0.into(),
                 closing_tx_id: 0.into(),
-                btc_fee_recipient: 0.into(),
-                btc_mint_fee_basis_points: 0,
-                btc_redeem_fee_basis_points: 0,
+                btc_fee_recipient: self.btc_fee_recipient.read().into(),
+                btc_mint_fee_basis_points: self.btc_mint_fee_rate.read().into(),
+                btc_redeem_fee_basis_points: self.btc_redeem_fee_rate.read().into(),
                 taproot_pubkey: "",
                 wd_tx_id: 0.into(),
             };
@@ -602,8 +602,13 @@ pub mod IBTCManager {
         }
 
         #[external(v0)]
-        fn get_btc_fee_recipient(self: @ContractState) -> felt252 {
+        fn get_btc_fee_recipient(self: @ContractState) -> ByteArray {
             self.btc_fee_recipient.read()
+        }
+
+        #[external(v0)]
+        fn get_attestor_group_pubkey(self: @ContractState) -> ByteArray {
+            self.attestor_group_pubkey.read()
         }
 
         #[external(v0)]
@@ -639,7 +644,7 @@ pub mod IBTCManager {
         }
 
         #[external(v0)]
-        fn set_attestor_group_pubkey(ref self: ContractState, pubkey: felt252) {
+        fn set_attestor_group_pubkey(ref self: ContractState, pubkey: ByteArray) {
             self.accesscontrol.assert_only_role(IBTC_ADMIN_ROLE);
             self.attestor_group_pubkey.write(pubkey);
         }
@@ -687,14 +692,15 @@ pub mod IBTCManager {
         }
 
         #[external(v0)]
-        fn set_btc_fee_recipient(ref self: ContractState, recipient: felt252) {
+        fn set_btc_fee_recipient(ref self: ContractState, recipient: ByteArray) {
             self.accesscontrol.assert_only_role(IBTC_ADMIN_ROLE);
+            let recipient_clone = recipient.clone();
             self.btc_fee_recipient.write(recipient);
-            self.emit(SetBtcFeeRecipient{btc_fee_recipient: recipient});
+            self.emit(SetBtcFeeRecipient{btc_fee_recipient: recipient_clone});
         }
 
         #[external(v0)]
-        fn set_btc_fee_recipient_for_vault(ref self: ContractState, uuid: felt252, recipient: felt252) {
+        fn set_btc_fee_recipient_for_vault(ref self: ContractState, uuid: felt252, recipient: ByteArray) {
             self.accesscontrol.assert_only_role(IBTC_ADMIN_ROLE);
             let ibtc_idx = self.ibtc_vault_ids_by_uuid.entry(uuid).read();
             let mut ibtc = self.ibtc_vaults.entry(ibtc_idx).read();

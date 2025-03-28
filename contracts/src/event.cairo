@@ -82,7 +82,7 @@ pub struct SetBtcRedeemFeeRate {
 
 #[derive(Drop, starknet::Event)]
 pub struct SetBtcFeeRecipient {
-    btc_fee_recipient: felt252,
+    btc_fee_recipient: ByteArray,
 }
 
 #[derive(Drop, starknet::Event)]

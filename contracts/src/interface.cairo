@@ -69,7 +69,8 @@ pub trait IBTCManagerABI<TState> {
     fn get_whitelisting_enabled(self: @TState) -> bool;
     fn get_btc_mint_fee_rate(self: @TState) -> u16;
     fn get_btc_redeem_fee_rate(self: @TState) -> u16;
-    fn get_btc_fee_recipient(self: @TState) -> felt252;
+    fn get_btc_fee_recipient(self: @TState) -> ByteArray;
+    fn get_attestor_group_pubkey(self: @TState) -> ByteArray;
     fn get_minimum_deposit(self: @TState) -> u256;
     fn get_maximum_deposit(self: @TState) -> u256;
     fn get_tss_commitment(self: @TState) -> felt252;
@@ -89,15 +90,15 @@ pub trait IBTCManagerABI<TState> {
 
     fn set_threshold(ref self: TState, new_threshold: u16);
     fn set_tss_commitment(ref self: TState, commitment: felt252);
-    fn set_attestor_group_pubkey(ref self: TState, pubkey: felt252);
+    fn set_attestor_group_pubkey(ref self: TState, pubkey: ByteArray);
     fn whitelist_address(ref self: TState, account: ContractAddress);
     fn unwhitelist_address(ref self: TState, account: ContractAddress);
     fn set_minimum_deposit(ref self: TState, amount: u256);
     fn set_maximum_deposit(ref self: TState, amount: u256);
     fn set_btc_mint_fee_rate(ref self: TState, rate: u16);
     fn set_btc_redeem_fee_rate(ref self: TState, rate: u16);
-    fn set_btc_fee_recipient(ref self: TState, recipient: felt252);
-    fn set_btc_fee_recipient_for_vault(ref self: TState, uuid: felt252, recipient: felt252);
+    fn set_btc_fee_recipient(ref self: TState, recipient: ByteArray);
+    fn set_btc_fee_recipient_for_vault(ref self: TState, uuid: felt252, recipient: ByteArray);
     fn set_whitelisting_enabled(ref self: TState, enabled: bool);
     fn transfer_token_contract_ownership(ref self: TState, new_owner: ContractAddress);
     fn set_minter_on_token_contract(ref self: TState, minter: ContractAddress);
