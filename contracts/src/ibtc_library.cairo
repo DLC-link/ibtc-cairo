@@ -61,7 +61,7 @@ pub struct IBTCVault {
     status: u8,
     funding_tx_id: u256,
     closing_tx_id: u256,
-    btc_fee_recipient: felt252,
+    btc_fee_recipient: ByteArray,
     btc_mint_fee_basis_points: u64,
     btc_redeem_fee_basis_points: u64,
     taproot_pubkey: ByteArray,

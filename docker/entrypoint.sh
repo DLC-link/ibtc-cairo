@@ -43,6 +43,7 @@ echo "Running Node.js deployment script..."
 
 cd /app/scripts && node deploy.js devnet
 
+echo "Deployment Complete" >> /app/logs/starknet-devnet.log
 echo "Deployment completed. Container will continue running..."
 
 tail -f /app/logs/starknet-devnet.log
