@@ -11,7 +11,7 @@ pub struct CreateIBTCVault {
 #[derive(Drop, starknet::Event)]
 pub struct SetStatusFunded {
     uuid: felt252,
-    btc_tx_id: felt252,
+    btc_tx_id: u256,
     creator: ContractAddress,
     new_value_locked: u256,
     amount_to_mint: u256,
@@ -20,7 +20,7 @@ pub struct SetStatusFunded {
 #[derive(Drop, starknet::Event)]
 pub struct SetStatusPending {
     uuid: felt252,
-    btc_tx_id: felt252,
+    btc_tx_id: u256,
     creator: ContractAddress,
     taproot_pubkey: ByteArray,
     new_value_locked: u256,

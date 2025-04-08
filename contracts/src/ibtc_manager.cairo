@@ -280,7 +280,7 @@ pub mod IBTCManager {
                 let is_valid_signature = IAccountDispatcher { contract_address: *attestor }
                     .is_valid_signature(message_hash, signature.clone());
                 assert(is_valid_signature == 'VALID', Errors::INVALID_SIGNATURE);
-                // assert(self.accesscontrol.has_role(APPROVED_SIGNER, *attestor), Errors::INVALID_SIGNER);
+                assert(self.accesscontrol.has_role(APPROVED_SIGNER, *attestor), Errors::INVALID_SIGNER);
                 self._check_signer_unique(*attestor, message_hash);
             }
         }
@@ -301,7 +301,7 @@ pub mod IBTCManager {
                 let is_valid_signature = IAccountDispatcher { contract_address: *attestor }
                     .is_valid_signature(message_hash, signature.clone());
                 assert(is_valid_signature == 'VALID', Errors::INVALID_SIGNATURE);
-                // assert(self.accesscontrol.has_role(APPROVED_SIGNER, *attestor), Errors::INVALID_SIGNER);
+                assert(self.accesscontrol.has_role(APPROVED_SIGNER, *attestor), Errors::INVALID_SIGNER);
                 self._check_signer_unique(*attestor, message_hash);
             }
         }
@@ -440,7 +440,7 @@ pub mod IBTCManager {
         }
 
         #[external(v0)]
-        fn get_ssf_message(ref self: ContractState, uuid: felt252, btc_tx_id: felt252, new_value_locked: u256) -> felt252 {
+        fn get_ssf_message(ref self: ContractState, attestor: ContractAddress, uuid: felt252, btc_tx_id: u256, new_value_locked: u256) -> felt252 {
             let message = AttestorMultisigTx {
                 uuid,
                 btc_tx_id,
@@ -448,11 +448,11 @@ pub mod IBTCManager {
                 amount: new_value_locked,
             };
 
-            message.get_message_hash(get_caller_address())
+            message.get_message_hash(attestor)
         }
 
         #[external(v0)]
-        fn get_ssp_message(ref self: ContractState, attestor: ContractAddress, uuid: felt252, wdtx_id: felt252, new_value_locked: u256) -> felt252 {
+        fn get_ssp_message(ref self: ContractState, attestor: ContractAddress, uuid: felt252, wdtx_id: u256, new_value_locked: u256) -> felt252 {
             let message = AttestorMultisigTx {
                 uuid,
                 btc_tx_id: wdtx_id,
@@ -479,7 +479,7 @@ pub mod IBTCManager {
         }
 
         #[external(v0)]
-        fn set_status_funded(ref self: ContractState, uuid: felt252, btc_tx_id: felt252, signatures: Span<(ContractAddress, Array<felt252>)>, new_value_locked: u256) {
+        fn set_status_funded(ref self: ContractState, uuid: felt252, btc_tx_id: u256, new_value_locked: u256, signatures: Span<(ContractAddress, Array<felt252>)>) {
             self.pausable.assert_not_paused();
             self.accesscontrol.assert_only_role(APPROVED_SIGNER);
 
@@ -537,7 +537,7 @@ pub mod IBTCManager {
         }
 
         #[external(v0)]
-        fn set_status_pending(ref self: ContractState, uuid: felt252, wdtx_id: felt252, taproot_pubkey: ByteArray, new_value_locked: u256, signatures: Span<(ContractAddress, Array<felt252>)>) {
+        fn set_status_pending(ref self: ContractState, uuid: felt252, wdtx_id: u256, taproot_pubkey: ByteArray, new_value_locked: u256, signatures: Span<(ContractAddress, Array<felt252>)>) {
             self.pausable.assert_not_paused();
             self.accesscontrol.assert_only_role(APPROVED_SIGNER);
 

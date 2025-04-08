@@ -50,7 +50,7 @@ const U256_TYPE_HASH: felt252 = selector!("\"u256\"(\"low\":\"u128\",\"high\":\"
 #[derive(Drop, Copy, Hash)]
 pub struct AttestorMultisigTx {
     uuid: felt252,
-    btc_tx_id: felt252,
+    btc_tx_id: u256,
     tx_type: felt252,
     amount: u256,
 }
@@ -76,7 +76,7 @@ impl StructHashAttestorMultisigTx of IStructHash<AttestorMultisigTx> {
         let mut state = PoseidonTrait::new();
         state = state.update_with(ATTESTOR_MULTISIG_STRUCT_TYPE_HASH);
         state = state.update_with(*self.uuid);
-        state = state.update_with(*self.btc_tx_id);
+        state = state.update_with(self.btc_tx_id.get_struct_hash());
         state = state.update_with(*self.tx_type);
         state = state.update_with(self.amount.get_struct_hash());
         state.finalize()
