@@ -19,8 +19,8 @@ use ibtc_cairo::ibtc_manager::{APPROVED_SIGNER};
 
 // Constants
 pub const VALUE_LOCKED: u256 = 100000000; // 1 BTC
-pub const BTC_TX_ID: u256 = 0x1234567890;
-pub const BTC_TX_ID2: u256 = 0x1234567891;
+pub const BTC_TX_ID: felt252 = 0x1234567890;
+pub const BTC_TX_ID2: felt252 = 0x1234567891;
 pub const BTC_FEE_RECIPIENT: felt252 = 0x000001;
 
 pub fn mock_taproot_pubkey() -> ByteArray {

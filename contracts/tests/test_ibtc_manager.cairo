@@ -22,9 +22,12 @@ use starknet::get_caller_address;
 
 // Constants
 const VALUE_LOCKED: u256 = 100000000; // 1 BTC
-const BTC_TX_ID: u256 = 0x1234567890;
-const BTC_TX_ID2: u256 = 0x1234567891;
-const BTC_FEE_RECIPIENT: felt252 = 0x000001;
+const BTC_TX_ID: felt252 = 0x5e9e65610afeda9960f5f0396963fc5fc20db10d33a0ba29051cd2759d39c88;
+const BTC_TX_ID2: felt252 = 0x5e9e65610afeda9960f5f0396963fc5fc20db10d33a0ba29051cd2759d39c87;
+
+fn btc_fee_recipient() -> ByteArray {
+    "bcrt1qvgkz8m4m73kly4xhm28pcnv46n6u045lfq9ta3"
+}
 
 fn mock_taproot_pubkey() -> ByteArray {
     let mut buffer = "";
@@ -45,6 +48,7 @@ fn whitelist_address() -> ContractAddress {
     contract_address_const::<0x111>()
 }
 
+
 // Helper function to setup contracts
 fn setup_contracts() -> (IBTCManagerABISafeDispatcher, IBTCTokenABISafeDispatcher, IBTCManagerABIDispatcher, IBTCTokenABIDispatcher) {
     // Deploy IBTC
@@ -56,13 +60,24 @@ fn setup_contracts() -> (IBTCManagerABISafeDispatcher, IBTCTokenABISafeDispatche
     let ibtc_token_safe = IBTCTokenABISafeDispatcher { contract_address: ibtc_token_address };
     let ibtc_token = IBTCTokenABIDispatcher { contract_address: ibtc_token_address };
 
+    let attestors: Array<felt252> = array![
+    0x078662e7352d062084b0010068b99288486c2d8b914f6e2a55ce945f8792c8b1,
+    0x049dfb8ce986e21d354ac93ea65e6a11f639c1934ea253e5ff14ca62eca0f38e,
+    0x04f348398f859a55a0c80b1446c5fdc37edb3a8478a32f10764659fc241027d3,
+];
+
+
     // Deploy IBTCManager
-    let ibtc_manager_calldata: Array<felt252> = array![
+    let ibtc_manager_calldata: Array<felt252>  = array![
         owner.into(), // owner
         ibtc_admin.into(), // admin
-        3, // threshold
+        3.into(), // threshold
         ibtc_token_address.into(), // ibtc address
-        BTC_FEE_RECIPIENT // btc fee recipient
+        0x35357b81889407078686d323870636e76343661ea06e1ae073db3a6349430af, // btc fee recipient
+        attestors.len().into(), // number of attestors
+        *attestors.at(0), // first attestor
+        *attestors.at(1), // second attestor
+        *attestors.at(2)  // third attestor
     ];
     let ibtc_manager_address = utils::declare_and_deploy("IBTCManager", ibtc_manager_calldata);
     let ibtc_manager_safe = IBTCManagerABISafeDispatcher { contract_address: ibtc_manager_address };
@@ -786,7 +801,7 @@ fn test_deposit_more_bitcoin() {
     setup_attestors_and_fund(ibtc_manager, *uuid, VALUE_LOCKED);
 
     // Add more bitcoin
-    let new_amount = VALUE_LOCKED + VALUE_LOCKED / 2;
+    let new_amount: u256 = VALUE_LOCKED + VALUE_LOCKED / 2;
     
     // Setup attestors for additional deposit
     let key_pair_attestor1 = StarkCurveKeyPairImpl::generate();
@@ -816,10 +831,14 @@ fn test_deposit_more_bitcoin() {
         amount: 0
     }, attestors.span(), 3);
 
+    println!("pending_signatures");
+
     start_cheat_caller_address(ibtc_manager.contract_address, attestor1);
+    println!("set_status_pending");
     ibtc_manager.set_status_pending(
         *uuid, BTC_TX_ID2, pending_signatures, mock_taproot_pubkey(), 0
     );
+    println!("set_status_pending done");
 
     let funded_signatures = get_signatures(AttestorMultisigTx {
         uuid: *uuid,
