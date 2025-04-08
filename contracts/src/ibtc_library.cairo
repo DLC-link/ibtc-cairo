@@ -53,7 +53,7 @@ pub impl IBTCVaultStatusIntoU8 of Into<IBTCVaultStatus, u8> {
 // Define the IBTCVault struct
 #[derive(Serde, Drop, starknet::Store, Debug)]
 pub struct IBTCVault {
-    uuid: felt252,
+    uuid: u256,
     protocol_contract: ContractAddress,
     timestamp: u64,
     value_locked: u256,
