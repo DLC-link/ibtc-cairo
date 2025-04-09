@@ -106,11 +106,7 @@ async function deployContracts(account, declarations, provider) {
         THRESHOLD,
         deployments.IBTCToken.address,
         BTC_FEE_RECIPIENT,
-        // Add attestors array (using account address as placeholder)
-        // First parameter is the length of the array
-        ATTESTORS.length, // Number of attestors
-        // Then each attestor address
-        ...ATTESTORS,
+        false,
       ],
       salt: SALT,
     });
@@ -157,6 +153,23 @@ async function deployContracts(account, declarations, provider) {
   } catch (err) {
     log.error(`Failed to transfer ownership of IBTCToken to IBTCManager: ${err.message}`);
   }
+
+  // grant approved signer role to attestors
+  log.step('Granting approved signer role to attestors...');
+  const managerContract = new Contract(
+    json.parse(
+      fs.readFileSync('../contracts/target/dev/ibtc_cairo_IBTCManager.contract_class.json').toString('ascii')
+    ).abi,
+    deployments.IBTCManager.address,
+    provider
+  );
+
+  const grantApprovedSignerCall = managerContract.populate('set_approved_signers', {
+    signers: ATTESTORS,
+  });
+  const { transaction_hash } = await account.execute(grantApprovedSignerCall);
+  await provider.waitForTransaction(transaction_hash);
+  log.success(`Approved signers set, tx: ${transaction_hash}`);
 
   return deployments;
 }
@@ -206,6 +219,28 @@ async function saveDeployment(network, deployments, declarations) {
   log.success(`Deployment addresses saved to ${deploymentPath}`);
 }
 
+async function mintTokensToAccount(account, provider, network) {
+  log.step('Minting tokens to account...');
+
+  try {
+    if (network === 'devnet') {
+      await fetch('http://localhost:5050/mint', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          address: account.address,
+          amount: 10000000000000000,
+          unit: 'WEI',
+        }),
+      });
+    }
+  } catch (error) {
+    log.error(`Failed to mint WEI: ${error.message}`);
+  }
+}
+
 async function main() {
   try {
     // Get command line arguments
@@ -220,6 +255,8 @@ async function main() {
     // Setup
     const provider = await setupProvider(network);
     const account = await setupAccount(provider, accountAddress, privateKey);
+
+    // Mint tokens to account
 
     // Contract paths
     const contractPaths = {
@@ -251,6 +288,8 @@ async function main() {
     const deployments = await deployContracts(account, declarations, provider);
     await verifyDeployment(provider, deployments);
     await saveDeployment(network, deployments, declarations);
+
+    await mintTokensToAccount(account, provider, network);
 
     log.success('Deployment completed successfully!');
   } catch (error) {

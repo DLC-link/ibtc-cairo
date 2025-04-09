@@ -178,7 +178,7 @@ pub mod IBTCManager {
         threshold: u16,
         token_contract: ContractAddress,
         btc_fee_recipient_to_set: ByteArray,
-        attestors: Array<ContractAddress>
+        whitelisting_enabled: bool,
     ) {
         self.accesscontrol.initializer();
         // Grant roles
@@ -196,26 +196,13 @@ pub mod IBTCManager {
         }
         self.threshold.write(threshold);
         
-        // Grant APPROVED_SIGNER role to each attestor
-        let attestors_len = attestors.len();
-        let mut i: usize = 0;
-        loop {
-            if i >= attestors_len {
-                break;
-            }
-            let attestor = attestors.at(i);
-            self.accesscontrol._grant_role(APPROVED_SIGNER, *attestor);
-            i += 1;
-        };
-        self.signer_count.write(attestors_len.try_into().unwrap());
-        
         // Initialize other storage variables
         self.index.write(0);
         self.tss_commitment.write(0);
         self.ibtc_token.write(token_contract);
         self.minimum_deposit.write(1_000_000_u256); // 0.01 BTC
         self.maximum_deposit.write(500_000_000_u256); // 5 BTC
-        self.whitelisting_enabled.write(false);
+        self.whitelisting_enabled.write(whitelisting_enabled);
         self.btc_mint_fee_rate.write(12); // 0.12% BTC fee
         self.btc_redeem_fee_rate.write(15); // 0.15% BTC fee
         self.btc_fee_recipient.write(btc_fee_recipient_to_set);

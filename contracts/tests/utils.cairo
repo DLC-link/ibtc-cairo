@@ -19,8 +19,8 @@ use ibtc_cairo::ibtc_manager::{APPROVED_SIGNER};
 
 // Constants
 pub const VALUE_LOCKED: u256 = 100000000; // 1 BTC
-pub const BTC_TX_ID: felt252 = 0x1234567890;
-pub const BTC_TX_ID2: felt252 = 0x1234567891;
+pub const BTC_TX_ID: u256 = 0x1234567890;
+pub const BTC_TX_ID2: u256 = 0x1234567891;
 pub const BTC_FEE_RECIPIENT: felt252 = 0x000001;
 
 pub fn mock_taproot_pubkey() -> ByteArray {
@@ -92,7 +92,7 @@ pub fn get_signatures(
 
 pub fn setup_attestors_and_fund(
     ibtc_manager: IBTCManagerABIDispatcher, 
-    uuid: felt252,
+    uuid: u256,
     amount: u256
 ) {
     // Setup attestors
@@ -129,7 +129,7 @@ pub fn setup_attestors_and_fund(
     // Set status to pending
     start_cheat_caller_address(ibtc_manager.contract_address, attestor1);
     ibtc_manager.set_status_pending(
-        uuid, BTC_TX_ID, pending_signatures, mock_taproot_pubkey(), 0
+        uuid, BTC_TX_ID, mock_taproot_pubkey(), 0, pending_signatures
     );
 
     // Generate signatures for funded status
@@ -141,5 +141,5 @@ pub fn setup_attestors_and_fund(
     }, attestors.span(), 3);
 
     // Set status to funded
-    ibtc_manager.set_status_funded(uuid, BTC_TX_ID, funded_signatures, amount);
+    ibtc_manager.set_status_funded(uuid, BTC_TX_ID, amount, funded_signatures);
 }

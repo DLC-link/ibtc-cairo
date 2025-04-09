@@ -52,19 +52,19 @@ pub trait IBTCManagerABI<TState> {
 
     // deposit and withdraw
     fn setup_vault(ref self: TState) -> felt252;
-    fn set_status_funded(ref self: TState, uuid: felt252, btc_tx_id: u256, new_value_locked: u256, signatures: Span<(ContractAddress, Array<felt252>)>);
-    fn set_status_pending(ref self: TState, uuid: felt252, wdtx_id: u256, taproot_pubkey: ByteArray, new_value_locked: u256, signatures: Span<(ContractAddress, Array<felt252>)>);
+    fn set_status_funded(ref self: TState, uuid: u256, btc_tx_id: u256, new_value_locked: u256, signatures: Span<(ContractAddress, Array<felt252>)>);
+    fn set_status_pending(ref self: TState, uuid: u256, wdtx_id: u256, taproot_pubkey: ByteArray, new_value_locked: u256, signatures: Span<(ContractAddress, Array<felt252>)>);
     fn set_status_pendingm(ref self: TState, message: felt252, signatures: Span<(ContractAddress, Array<felt252>)>);
-    fn withdraw(ref self: TState, uuid: felt252, amount: u256);
+    fn withdraw(ref self: TState, uuid: u256, amount: u256);
 
     // getters
-    fn get_vault(self: @TState, uuid: felt252) -> IBTCVault;
+    fn get_vault(self: @TState, uuid: u256) -> IBTCVault;
     fn get_ibtc_vault_by_index(self: @TState, index: u128) -> IBTCVault;
     fn get_all_vaults(self: @TState, start_index: u256, end_index: u256) -> Array<IBTCVault>;
     fn get_all_vaults_for_address(self: @TState, owner: ContractAddress) -> Array<IBTCVault>;
     fn get_all_vault_uuids_for_address(self: @TState, owner: ContractAddress) -> Array<u256>;
-    fn get_ssf_message(self: @TState, attestor: ContractAddress, uuid: felt252, btc_tx_id: u256, new_value_locked: u256) -> felt252;
-    fn get_ssp_message(self: @TState, attestor: ContractAddress, uuid: felt252, wdtx_id: u256, new_value_locked: u256) -> felt252;
+    fn get_ssf_message(self: @TState, attestor: ContractAddress, uuid: u256, btc_tx_id: u256, new_value_locked: u256) -> felt252;
+    fn get_ssp_message(self: @TState, attestor: ContractAddress, uuid: u256, wdtx_id: u256, new_value_locked: u256) -> felt252;
     fn is_whitelisted(self: @TState, account: ContractAddress) -> bool;
     fn get_threshold(self: @TState) -> u16;
     fn get_minimum_threshold(self: @TState) -> u16;
@@ -77,7 +77,7 @@ pub trait IBTCManagerABI<TState> {
     fn get_minimum_deposit(self: @TState) -> u256;
     fn get_maximum_deposit(self: @TState) -> u256;
     fn get_tss_commitment(self: @TState) -> felt252;
-    fn get_user_vaults(self: @TState, owner: ContractAddress) -> Span<felt252>;
+    fn get_user_vaults(self: @TState, owner: ContractAddress) -> Span<u256>;
 
     // IAccessControl
     fn has_role(self: @TState, role: felt252, account: ContractAddress) -> bool;
