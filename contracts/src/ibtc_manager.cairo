@@ -100,12 +100,6 @@ pub mod IBTCManager {
         message: felt252,
     }
 
-    pub fn get_arbitrary_message_hash(message: felt252) -> felt252 {
-        let mut state = PoseidonTrait::new();        
-        state = state.update_with(message);
-        state.finalize()
-    }
-    
 
     // Define events
     #[event]
@@ -283,39 +277,6 @@ pub mod IBTCManager {
                 assert(self.accesscontrol.has_role(APPROVED_SIGNER, *attestor), Errors::INVALID_SIGNER);
                 self._check_signer_unique(*attestor, message);
             }
-        }
-
-        fn _attestor_multisig_message_is_valid(
-            ref self: ContractState,
-            message: felt252,
-            signatures: Span<(ContractAddress, Array<felt252>)>
-        ) {
-            let threshold = self.threshold.read();
-            assert(signatures.len() >= threshold.into(), Errors::NOT_ENOUGH_SIGNATURES);
-            for (attestor, signature) in signatures {
-                let message_hash = message.clone();
-                let valid_length = signature.len() == 2;
-                if !valid_length {
-                    panic_with_felt252(Errors::INVALID_SIGNATURE_LENGTH);
-                }
-                let is_valid_signature = IAccountDispatcher { contract_address: *attestor }
-                    .is_valid_signature(message_hash, signature.clone());
-                assert(is_valid_signature == 'VALID', Errors::INVALID_SIGNATURE);
-                assert(self.accesscontrol.has_role(APPROVED_SIGNER, *attestor), Errors::INVALID_SIGNER);
-                self._check_signer_unique(*attestor, message_hash);
-            }
-        }
-
-        fn _attestor_signature_is_valid(
-            ref self: ContractState,
-            message: AttestorMultisigTx,
-            attestor: ContractAddress,
-            signature: Array<felt252>
-        ) {
-            let message_hash = message.get_message_hash(attestor);
-            let is_valid_signature = IAccountDispatcher { contract_address: attestor }
-                .is_valid_signature(message_hash, signature.clone());
-            assert(is_valid_signature == 'VALID', Errors::INVALID_SIGNATURE);
         }
 
         fn _check_signer_unique(

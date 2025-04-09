@@ -36,6 +36,7 @@ fn mock_taproot_pubkey() -> ByteArray {
     buffer
 }
 
+
 fn ibtc_admin() -> ContractAddress {
     contract_address_const::<0x456>()
 }
@@ -49,6 +50,7 @@ fn whitelist_address() -> ContractAddress {
 }
 
 
+
 // Helper function to setup contracts
 fn setup_contracts() -> (IBTCManagerABISafeDispatcher, IBTCTokenABISafeDispatcher, IBTCManagerABIDispatcher, IBTCTokenABIDispatcher) {
     // Deploy IBTC
@@ -60,26 +62,30 @@ fn setup_contracts() -> (IBTCManagerABISafeDispatcher, IBTCTokenABISafeDispatche
     let ibtc_token_safe = IBTCTokenABISafeDispatcher { contract_address: ibtc_token_address };
     let ibtc_token = IBTCTokenABIDispatcher { contract_address: ibtc_token_address };
 
-    let attestors: Array<felt252> = array![
-    0x078662e7352d062084b0010068b99288486c2d8b914f6e2a55ce945f8792c8b1,
-    0x049dfb8ce986e21d354ac93ea65e6a11f639c1934ea253e5ff14ca62eca0f38e,
-    0x04f348398f859a55a0c80b1446c5fdc37edb3a8478a32f10764659fc241027d3,
-];
-
-
-    // Deploy IBTCManager
-    let ibtc_manager_calldata: Array<felt252>  = array![
-        owner.into(), // owner
-        ibtc_admin.into(), // admin
-        3.into(), // threshold
-        ibtc_token_address.into(), // ibtc address
-        0x35357b81889407078686d323870636e76343661ea06e1ae073db3a6349430af, // btc fee recipient
-        attestors.len().into(), // number of attestors
-        *attestors.at(0), // first attestor
-        *attestors.at(1), // second attestor
-        *attestors.at(2)  // third attestor
+    let mut btc_fee_recipient: Array<felt252> = array![
+        'b'.into(), 'c'.into(), '1'.into(), 'q'.into(), 'x'.into(), 'y'.into(),
+        '2'.into(), 'k'.into(), 'g'.into(), 'd'.into(), 'y'.into(), 'g'.into(),
+        'j'.into(), 'r'.into(), 's'.into(), 'q'.into(), 't'.into(), 'z'.into(),
+        'q'.into(), '2'.into(), 'n'.into(), '0'.into(), 'y'.into(), 'r'.into(),
+        'f'.into(), '2'.into(), '4'.into(), '9'.into(), '3'.into(), 'p'.into(),
+        '8'.into(), '3'.into(), 'k'.into(), 'k'.into(), 'f'.into(), 'j'.into(),
+        'h'.into(), 'x'.into(), '0'.into(), 'w'.into(), 'l'.into(), 'h'.into()
     ];
-    let ibtc_manager_address = utils::declare_and_deploy("IBTCManager", ibtc_manager_calldata);
+    
+    let mut calldata: Array<felt252> = array![
+        owner.into(),
+        ibtc_admin.into(),
+        3.into(),
+        ibtc_token_address.into(),
+        btc_fee_recipient.len().into(),
+    ];
+    
+    for i in 0..btc_fee_recipient.len() {
+        calldata.append(*btc_fee_recipient.at(i));
+    };
+    
+    calldata.append(0.into()); // whitelisting_enabled = false
+    let ibtc_manager_address = utils::declare_and_deploy("IBTCManager", calldata);
     let ibtc_manager_safe = IBTCManagerABISafeDispatcher { contract_address: ibtc_manager_address };
     let ibtc_manager = IBTCManagerABIDispatcher { contract_address: ibtc_manager_address };
 
