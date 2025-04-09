@@ -12,8 +12,8 @@ const __deployments = path.join(__dirname, '../deployments');
 
 // Constants
 const SALT = '0x1';
-const BTC_FEE_RECIPIENT = 'bcrt1qvgkz8m4m73kly4xhm28pcnv46n6u045lfq9ta3';
-const THRESHOLD = 1;
+const BTC_FEE_RECIPIENT = 'bcrt1qt2qlxef4nqrkn0xvy0qevvm60pzc40g7a3j50m';
+const THRESHOLD = 2;
 const ATTESTORS = [
   '0x078662e7352d062084b0010068b99288486c2d8b914f6e2a55ce945f8792c8b1',
   '0x049dfb8ce986e21d354ac93ea65e6a11f639c1934ea253e5ff14ca62eca0f38e',

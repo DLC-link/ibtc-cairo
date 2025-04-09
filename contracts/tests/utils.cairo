@@ -87,7 +87,6 @@ pub fn get_signatures(
         let (r, s) = key_pair.sign(message_hash).unwrap();
         signatures.append((attestor, array![r, s]));
     };
-    // println!("signatures: {:?}", signatures);
     signatures.span()
 }
 
