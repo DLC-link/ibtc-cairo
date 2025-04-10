@@ -124,8 +124,6 @@ pub fn setup_attestors_and_fund(
         amount: 0
     }, attestors.span(), 3);
 
-    // println!("pending_signatures: {:?}", pending_signatures);
-
     // Set status to pending
     start_cheat_caller_address(ibtc_manager.contract_address, attestor1);
     ibtc_manager.set_status_pending(

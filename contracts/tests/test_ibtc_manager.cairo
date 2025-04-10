@@ -61,30 +61,19 @@ fn setup_contracts() -> (IBTCManagerABISafeDispatcher, IBTCTokenABISafeDispatche
     let ibtc_token_address = utils::declare_and_deploy("IBTCToken", ibtc_token_calldata);
     let ibtc_token_safe = IBTCTokenABISafeDispatcher { contract_address: ibtc_token_address };
     let ibtc_token = IBTCTokenABIDispatcher { contract_address: ibtc_token_address };
-
-    let mut btc_fee_recipient: Array<felt252> = array![
-        'b'.into(), 'c'.into(), '1'.into(), 'q'.into(), 'x'.into(), 'y'.into(),
-        '2'.into(), 'k'.into(), 'g'.into(), 'd'.into(), 'y'.into(), 'g'.into(),
-        'j'.into(), 'r'.into(), 's'.into(), 'q'.into(), 't'.into(), 'z'.into(),
-        'q'.into(), '2'.into(), 'n'.into(), '0'.into(), 'y'.into(), 'r'.into(),
-        'f'.into(), '2'.into(), '4'.into(), '9'.into(), '3'.into(), 'p'.into(),
-        '8'.into(), '3'.into(), 'k'.into(), 'k'.into(), 'f'.into(), 'j'.into(),
-        'h'.into(), 'x'.into(), '0'.into(), 'w'.into(), 'l'.into(), 'h'.into()
-    ];
-    
     let mut calldata: Array<felt252> = array![
         owner.into(),
         ibtc_admin.into(),
         3.into(),
         ibtc_token_address.into(),
-        btc_fee_recipient.len().into(),
+        1, 
+        0x626372743171766762387a346d346d37336b6c7934786d32387063767334, 
+        0x366e3675303435496671397461, 
+        11,
+        1
     ];
     
-    for i in 0..btc_fee_recipient.len() {
-        calldata.append(*btc_fee_recipient.at(i));
-    };
-    
-    calldata.append(0.into()); // whitelisting_enabled = false
+
     let ibtc_manager_address = utils::declare_and_deploy("IBTCManager", calldata);
     let ibtc_manager_safe = IBTCManagerABISafeDispatcher { contract_address: ibtc_manager_address };
     let ibtc_manager = IBTCManagerABIDispatcher { contract_address: ibtc_manager_address };
@@ -274,7 +263,6 @@ fn test_setup_vault() {
     start_cheat_caller_address(ibtc_manager_safe.contract_address, user);
     let mut spy = spy_events();
     ibtc_manager.setup_vault();
-    
     // Check event was emitted
     let (_, event) = spy.get_events().events.at(1);
     let uuid_low = event.data.at(0);
@@ -371,8 +359,6 @@ fn setup_attestors_and_fund(
         amount: 0
     }, attestors.span(), 3);
 
-    // println!("pending_signatures: {:?}", pending_signatures);
-
     // Set status to pending
     start_cheat_caller_address(ibtc_manager.contract_address, attestor1);
     ibtc_manager.set_status_pending(
@@ -406,11 +392,13 @@ fn test_get_ibtc_vault() {
     let (_, event) = spy.get_events().events.at(1);
     let uuid_low = event.data.at(0);
     let uuid_high = event.data.at(1);
-    let uuid = u256 { low: (*uuid_low).try_into().unwrap(), high: (*uuid_high).try_into().unwrap() };
-
+    let uuid_low_int = (*uuid_low).try_into().unwrap();
+    let uuid_high_int = (*uuid_high).try_into().unwrap();
+    let uuid = u256 { low: uuid_low_int, high: uuid_high_int };
+    
     // Try getting non-existent IBTCVault
-    let wrong_uuid_low = 0x96eecb386fb10e82f510aaf3e2b99f52f8dcba;
-    let wrong_uuid_high = 0x0;
+    let wrong_uuid_low = 91044518406403680085907560571636167243;
+    let wrong_uuid_high = 8805326864190065380747486608483342166;
     let wrong_uuid = u256 { low: wrong_uuid_low.try_into().unwrap(), high: wrong_uuid_high.try_into().unwrap() };
     let result = ibtc_manager_safe.get_vault(wrong_uuid);
     assert!(result.is_err(), "Vault not found");
@@ -470,7 +458,9 @@ fn test_set_status_funded_validations() {
     let (_, event) = spy.get_events().events.at(1);
     let uuid_low = event.data.at(0);
     let uuid_high = event.data.at(1);
-    let uuid = u256 { low: (*uuid_low).try_into().unwrap(), high: (*uuid_high).try_into().unwrap() };
+    let uuid_low_int = (*uuid_low).try_into().unwrap();
+    let uuid_high_int = (*uuid_high).try_into().unwrap();
+    let uuid = u256 { low: uuid_low_int, high: uuid_high_int };
 
     // Setup attestors
     let key_pair_attestor1 = StarkCurveKeyPairImpl::generate();
@@ -529,8 +519,8 @@ fn test_set_status_funded_validations() {
     assert!(result.is_err(), "Should fail with wrong function signature");
 
     // Test with wrong UUID
-    let wrong_uuid_low = 0x96eecb386fb10e82f510aaf3e2b99f52f8dcba;
-    let wrong_uuid_high = 0x0;
+    let wrong_uuid_low = 91044518406403680085907560571636167243;
+    let wrong_uuid_high = 8805426864190065380747486608483342165;
     let wrong_uuid = u256 { low: wrong_uuid_low.try_into().unwrap(), high: wrong_uuid_high.try_into().unwrap() };
     let wrong_uuid_signatures = get_signatures(AttestorMultisigTx {
         uuid: wrong_uuid,
@@ -866,14 +856,10 @@ fn test_deposit_more_bitcoin() {
         amount: 0
     }, attestors.span(), 3);
 
-    println!("pending_signatures");
-
     start_cheat_caller_address(ibtc_manager.contract_address, attestor1);
-    println!("set_status_pending");
     ibtc_manager.set_status_pending(
         uuid, BTC_TX_ID2, mock_taproot_pubkey(), 0, pending_signatures
     );
-    println!("set_status_pending done");
 
     let funded_signatures = get_signatures(AttestorMultisigTx {
         uuid: uuid,
