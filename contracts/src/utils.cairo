@@ -43,7 +43,7 @@ const STARKNET_DOMAIN_TYPE_HASH: felt252 =
     );
 
 const ATTESTOR_MULTISIG_STRUCT_TYPE_HASH: felt252 =
-    selector!("\"AttestorMultisigTx\"(\"uuid\":\"u256\",\"btc_tx_id\":\"u256\",\"tx_type\":\"felt\",\"amount\":\"u256\")");
+    selector!("\"AttestorMultisigTx\"(\"uuid\":\"u256\",\"btc_tx_id\":\"u256\",\"tx_type\":\"felt\",\"amount\":\"u256\")\"u256\"(\"low\":\"u128\",\"high\":\"u128\")");
 
 const U256_TYPE_HASH: felt252 = selector!("\"u256\"(\"low\":\"u128\",\"high\":\"u128\")");
 
