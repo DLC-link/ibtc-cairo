@@ -75,7 +75,7 @@ pub fn setup_account(public_key: felt252) -> ContractAddress {
     utils::declare_and_deploy("SnakeAccountMock", calldata)
 }
 
-pub fn get_signatures(
+pub fn get_signatures_from_request(
     message: AttestorMultisigTx,
     attestors: Span<(ContractAddress, KeyPair<felt252, felt252>)>,
     number_of_signatures: u8
@@ -88,6 +88,60 @@ pub fn get_signatures(
         signatures.append((attestor, array![r, s]));
     };
     signatures.span()
+}
+
+pub fn get_signatures_from_messages(
+    messages: Array<(ContractAddress, felt252)>,
+    attestors: Span<(ContractAddress, KeyPair<felt252, felt252>)>,
+    number_of_signatures: u8
+) -> Span<(ContractAddress, Array<felt252>)> {
+    let mut signatures = array![];
+    for i in 0..number_of_signatures {
+        let (attestor, key_pair) = *attestors.at(i.into());
+        
+        let mut message = 0;
+        for j in 0..messages.len() {
+            let (msg_attestor, msg) = *messages.at(j);
+            if msg_attestor == attestor {
+                message = msg;
+                break;
+            }
+        };
+        
+        let (r, s) = key_pair.sign(message).unwrap();
+        signatures.append((attestor, array![r, s]));
+    };
+    signatures.span()
+}
+
+pub fn get_ssp_messages(
+    ibtc_manager: IBTCManagerABIDispatcher,
+    uuid: u256,
+    btc_tx_id: u256,
+    amount: u256,
+    attestors: Array<ContractAddress>
+) -> Array<(ContractAddress, felt252)> {
+    let mut messages = array![];
+    for attestor in attestors.span() {
+        let message = ibtc_manager.get_ssp_message(*attestor, uuid, btc_tx_id, amount);
+        messages.append((*attestor, message));
+    };
+    messages
+}
+
+pub fn get_ssf_messages(
+    ibtc_manager: IBTCManagerABIDispatcher,
+    uuid: u256,
+    btc_tx_id: u256,
+    amount: u256,
+    attestors: Array<ContractAddress>
+) -> Array<(ContractAddress, felt252)> {
+    let mut messages = array![];
+    for attestor in attestors.span() {
+        let message = ibtc_manager.get_ssf_message(*attestor, uuid, btc_tx_id, amount);
+        messages.append((*attestor, message));
+    };
+    messages
 }
 
 pub fn setup_attestors_and_fund(
@@ -116,13 +170,10 @@ pub fn setup_attestors_and_fund(
         ibtc_manager.grant_role(APPROVED_SIGNER, *attestor);
     };
 
+    let pending_messages = get_ssp_messages(ibtc_manager, uuid, BTC_TX_ID, 0, array![attestor1, attestor2, attestor3]);
+
     // Generate signatures for pending status
-    let pending_signatures = get_signatures(AttestorMultisigTx {
-        uuid,
-        btc_tx_id: BTC_TX_ID,
-        tx_type: 'set-status-pending',
-        amount: 0
-    }, attestors.span(), 3);
+    let pending_signatures = get_signatures_from_messages(pending_messages, attestors.span(), 3);
 
     // Set status to pending
     start_cheat_caller_address(ibtc_manager.contract_address, attestor1);
@@ -131,12 +182,7 @@ pub fn setup_attestors_and_fund(
     );
 
     // Generate signatures for funded status
-    let funded_signatures = get_signatures(AttestorMultisigTx {
-        uuid,
-        btc_tx_id: BTC_TX_ID,
-        tx_type: 'set-status-funded',
-        amount
-    }, attestors.span(), 3);
+    let funded_signatures = get_signatures_from_messages(get_ssf_messages(ibtc_manager, uuid, BTC_TX_ID, amount, array![attestor1, attestor2, attestor3]), attestors.span(), 3);
 
     // Set status to funded
     ibtc_manager.set_status_funded(uuid, BTC_TX_ID, amount, funded_signatures);

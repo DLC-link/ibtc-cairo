@@ -20,7 +20,7 @@ use ibtc_cairo::event::{
 };
 use core::poseidon::PoseidonTrait;
 use core::hash::{HashStateTrait, HashStateExTrait};
-use crate::utils::{get_signatures, AttestorMultisigTx};
+use crate::utils::{get_signatures_from_messages, get_signatures_from_request, AttestorMultisigTx};
 use snforge_std::signature::stark_curve::{StarkCurveKeyPairImpl, StarkCurveSignerImpl};
 use crate::utils::{
     setup_contracts, setup_attestors_and_fund, setup_account,
@@ -28,4 +28,3 @@ use crate::utils::{
     ibtc_admin, default_admin, whitelist_address, mock_taproot_pubkey
 };
 use ibtc_cairo::ibtc_manager::{APPROVED_SIGNER};
-
