@@ -15,16 +15,19 @@ use ibtc_cairo::event::{
 };
 use core::poseidon::PoseidonTrait;
 use core::hash::{HashStateTrait, HashStateExTrait};
-use crate::utils::{get_signatures, AttestorMultisigTx};
+use crate::utils::{get_signatures_from_request, get_signatures_from_messages, get_ssf_messages, get_ssp_messages, AttestorMultisigTx};
 use snforge_std::signature::stark_curve::{StarkCurveKeyPairImpl, StarkCurveSignerImpl};
 use ibtc_cairo::ibtc_manager::{APPROVED_SIGNER};
 use starknet::get_caller_address;
 
 // Constants
 const VALUE_LOCKED: u256 = 100000000; // 1 BTC
-const BTC_TX_ID: u256 = 0x1234567890;
-const BTC_TX_ID2: u256 = 0x1234567891;
-const BTC_FEE_RECIPIENT: felt252 = 0x000001;
+const BTC_TX_ID: u256 = 0x5e9e65610afeda9960f5f0396963fc5fc20db10d33a0ba29051cd2759d39c88;
+const BTC_TX_ID2: u256 = 0x5e9e65610afeda9960f5f0396963fc5fc20db10d33a0ba29051cd2759d39c87;
+
+fn btc_fee_recipient() -> ByteArray {
+    "bcrt1qvgkz8m4m73kly4xhm28pcnv46n6u045lfq9ta3"
+}
 
 fn mock_taproot_pubkey() -> ByteArray {
     let mut buffer = "";
@@ -32,6 +35,7 @@ fn mock_taproot_pubkey() -> ByteArray {
     buffer.append_word(0x1234567890123456789012345678901234, 17);
     buffer
 }
+
 
 fn ibtc_admin() -> ContractAddress {
     contract_address_const::<0x456>()
@@ -45,6 +49,8 @@ fn whitelist_address() -> ContractAddress {
     contract_address_const::<0x111>()
 }
 
+
+
 // Helper function to setup contracts
 fn setup_contracts() -> (IBTCManagerABISafeDispatcher, IBTCTokenABISafeDispatcher, IBTCManagerABIDispatcher, IBTCTokenABIDispatcher) {
     // Deploy IBTC
@@ -55,16 +61,20 @@ fn setup_contracts() -> (IBTCManagerABISafeDispatcher, IBTCTokenABISafeDispatche
     let ibtc_token_address = utils::declare_and_deploy("IBTCToken", ibtc_token_calldata);
     let ibtc_token_safe = IBTCTokenABISafeDispatcher { contract_address: ibtc_token_address };
     let ibtc_token = IBTCTokenABIDispatcher { contract_address: ibtc_token_address };
-
-    // Deploy IBTCManager
-    let ibtc_manager_calldata: Array<felt252> = array![
-        owner.into(), // owner
-        ibtc_admin.into(), // admin
-        3, // threshold
-        ibtc_token_address.into(), // ibtc address
-        BTC_FEE_RECIPIENT // btc fee recipient
+    let mut calldata: Array<felt252> = array![
+        owner.into(),
+        ibtc_admin.into(),
+        3.into(),
+        ibtc_token_address.into(),
+        1, 
+        0x626372743171766762387a346d346d37336b6c7934786d32387063767334, 
+        0x366e3675303435496671397461, 
+        11,
+        1
     ];
-    let ibtc_manager_address = utils::declare_and_deploy("IBTCManager", ibtc_manager_calldata);
+    
+
+    let ibtc_manager_address = utils::declare_and_deploy("IBTCManager", calldata);
     let ibtc_manager_safe = IBTCManagerABISafeDispatcher { contract_address: ibtc_manager_address };
     let ibtc_manager = IBTCManagerABIDispatcher { contract_address: ibtc_manager_address };
 
@@ -253,9 +263,11 @@ fn test_setup_vault() {
     start_cheat_caller_address(ibtc_manager_safe.contract_address, user);
     let mut spy = spy_events();
     ibtc_manager.setup_vault();
-    
     // Check event was emitted
-    let uuid = *ibtc_manager.get_user_vaults(user).at(0);
+    let (_, event) = spy.get_events().events.at(1);
+    let uuid_low = event.data.at(0);
+    let uuid_high = event.data.at(1);
+    let uuid = u256 { low: (*uuid_low).try_into().unwrap(), high: (*uuid_high).try_into().unwrap() };
     let timestamp = ibtc_manager.get_vault(uuid).timestamp;
     let expected_event = IBTCManager::Event::CreateIBTCVault(
         CreateIBTCVault {
@@ -278,7 +290,10 @@ fn test_multiple_vault_setup() {
     // Create first vault
     let mut spy1 = spy_events();
     ibtc_manager.setup_vault();
-    let uuid1 = *ibtc_manager.get_user_vaults(user).at(0);
+    let (_, event1) = spy1.get_events().events.at(1);
+    let uuid_low1 = event1.data.at(0);
+    let uuid_high1 = event1.data.at(1);
+    let uuid1 = u256 { low: (*uuid_low1).try_into().unwrap(), high: (*uuid_high1).try_into().unwrap() };
     let timestamp1 = ibtc_manager.get_vault(uuid1).timestamp;
     let expected_event1 = IBTCManager::Event::CreateIBTCVault(
         CreateIBTCVault {
@@ -292,7 +307,10 @@ fn test_multiple_vault_setup() {
     // Create second vault
     let mut spy2 = spy_events();
     ibtc_manager.setup_vault();
-    let uuid2 = *ibtc_manager.get_user_vaults(user).at(1);
+    let (_, event2) = spy2.get_events().events.at(1);
+    let uuid_low2 = event2.data.at(0);
+    let uuid_high2 = event2.data.at(1);
+    let uuid2 = u256 { low: (*uuid_low2).try_into().unwrap(), high: (*uuid_high2).try_into().unwrap() };
     let timestamp2 = ibtc_manager.get_vault(uuid2).timestamp;
     let expected_event2 = IBTCManager::Event::CreateIBTCVault(
         CreateIBTCVault {
@@ -309,7 +327,7 @@ fn test_multiple_vault_setup() {
 
 fn setup_attestors_and_fund(
     ibtc_manager: IBTCManagerABIDispatcher, 
-    uuid: felt252,
+    uuid: u256,
     amount: u256
 ) {
     // Setup attestors
@@ -334,31 +352,19 @@ fn setup_attestors_and_fund(
     };
 
     // Generate signatures for pending status
-    let pending_signatures = get_signatures(AttestorMultisigTx {
-        uuid,
-        btc_tx_id: BTC_TX_ID,
-        tx_type: 'set-status-pending',
-        amount: 0
-    }, attestors.span(), 3);
-
-    // println!("pending_signatures: {:?}", pending_signatures);
+    let pending_signatures = get_signatures_from_messages(get_ssp_messages(ibtc_manager, uuid, BTC_TX_ID, 0, array![attestor1, attestor2, attestor3]), attestors.span(), 3);
 
     // Set status to pending
     start_cheat_caller_address(ibtc_manager.contract_address, attestor1);
     ibtc_manager.set_status_pending(
-        uuid, BTC_TX_ID, pending_signatures, mock_taproot_pubkey(), 0
+        uuid, BTC_TX_ID, mock_taproot_pubkey(), 0, pending_signatures
     );
 
     // Generate signatures for funded status
-    let funded_signatures = get_signatures(AttestorMultisigTx {
-        uuid,
-        btc_tx_id: BTC_TX_ID,
-        tx_type: 'set-status-funded',
-        amount
-    }, attestors.span(), 3);
+    let funded_signatures = get_signatures_from_messages(get_ssf_messages(ibtc_manager, uuid, BTC_TX_ID, amount, array![attestor1, attestor2, attestor3]), attestors.span(), 3);
 
     // Set status to funded
-    ibtc_manager.set_status_funded(uuid, BTC_TX_ID, funded_signatures, amount);
+    ibtc_manager.set_status_funded(uuid, BTC_TX_ID, amount, funded_signatures);
 }
 
 #[test]
@@ -374,18 +380,24 @@ fn test_get_ibtc_vault() {
     let mut spy = spy_events();
     ibtc_manager.setup_vault();
     let (_, event) = spy.get_events().events.at(1);
-    let uuid = event.data.at(0);
-
+    let uuid_low = event.data.at(0);
+    let uuid_high = event.data.at(1);
+    let uuid_low_int = (*uuid_low).try_into().unwrap();
+    let uuid_high_int = (*uuid_high).try_into().unwrap();
+    let uuid = u256 { low: uuid_low_int, high: uuid_high_int };
+    
     // Try getting non-existent IBTCVault
-    let wrong_uuid = 0x96eecb386fb10e82f510aaf3e2b99f52f8dcba;
+    let wrong_uuid_low = 91044518406403680085907560571636167243;
+    let wrong_uuid_high = 8805326864190065380747486608483342166;
+    let wrong_uuid = u256 { low: wrong_uuid_low.try_into().unwrap(), high: wrong_uuid_high.try_into().unwrap() };
     let result = ibtc_manager_safe.get_vault(wrong_uuid);
     assert!(result.is_err(), "Vault not found");
 
     // Setup attestors and set status to funded
-    setup_attestors_and_fund(ibtc_manager, *uuid, VALUE_LOCKED);
+    setup_attestors_and_fund(ibtc_manager, uuid, VALUE_LOCKED);
 
     // Get IBTCVault and verify data
-    let vault = ibtc_manager.get_vault(*uuid);
+    let vault = ibtc_manager.get_vault(uuid);
     assert!(vault.creator == user, "Wrong creator");
     assert!(vault.value_locked == VALUE_LOCKED, "Wrong value locked");
 }
@@ -408,10 +420,12 @@ fn test_get_vault_by_index() {
     let mut spy = spy_events();
     ibtc_manager.setup_vault();
     let (_, event) = spy.get_events().events.at(1);
-    let uuid = event.data.at(0);
+    let uuid_low = event.data.at(0);
+    let uuid_high = event.data.at(1);
+    let uuid = u256 { low: (*uuid_low).try_into().unwrap(), high: (*uuid_high).try_into().unwrap() };
 
     // Setup attestors and set status to funded
-    setup_attestors_and_fund(ibtc_manager, *uuid, VALUE_LOCKED);
+    setup_attestors_and_fund(ibtc_manager, uuid, VALUE_LOCKED);
 
     // Get vault by index and verify data
     let vault = ibtc_manager.get_ibtc_vault_by_index(0);
@@ -432,7 +446,11 @@ fn test_set_status_funded_validations() {
     let mut spy = spy_events();
     ibtc_manager.setup_vault();
     let (_, event) = spy.get_events().events.at(1);
-    let uuid = event.data.at(0);
+    let uuid_low = event.data.at(0);
+    let uuid_high = event.data.at(1);
+    let uuid_low_int = (*uuid_low).try_into().unwrap();
+    let uuid_high_int = (*uuid_high).try_into().unwrap();
+    let uuid = u256 { low: uuid_low_int, high: uuid_high_int };
 
     // Setup attestors
     let key_pair_attestor1 = StarkCurveKeyPairImpl::generate();
@@ -456,78 +474,54 @@ fn test_set_status_funded_validations() {
     };
 
     // Set status to pending first
-    let pending_signatures = get_signatures(AttestorMultisigTx {
-        uuid: *uuid,
-        btc_tx_id: BTC_TX_ID,
-        tx_type: 'set-status-pending',
-        amount: 0
-    }, attestors.span(), 3);
+    let pending_signatures = get_signatures_from_messages(get_ssp_messages(ibtc_manager, uuid, BTC_TX_ID, 0, array![attestor1, attestor2, attestor3]), attestors.span(), 3);
 
     start_cheat_caller_address(ibtc_manager.contract_address, attestor1);
     ibtc_manager.set_status_pending(
-        *uuid, BTC_TX_ID, pending_signatures, mock_taproot_pubkey(), 0
+        uuid, BTC_TX_ID, mock_taproot_pubkey(), 0, pending_signatures
     );
 
     // Test with not enough signatures
-    let insufficient_signatures = get_signatures(AttestorMultisigTx {
-        uuid: *uuid,
-        btc_tx_id: BTC_TX_ID,
-        tx_type: 'set-status-funded',
-        amount: VALUE_LOCKED
-    }, attestors.span(), 1);
+    let insufficient_signatures = get_signatures_from_messages(get_ssf_messages(ibtc_manager, uuid, BTC_TX_ID, VALUE_LOCKED, array![attestor1, attestor2, attestor3]), attestors.span(), 1);
 
-    let result = ibtc_manager_safe.set_status_funded(*uuid, BTC_TX_ID, insufficient_signatures, VALUE_LOCKED);
+    let result = ibtc_manager_safe.set_status_funded(uuid, BTC_TX_ID, VALUE_LOCKED, insufficient_signatures);
     assert!(result.is_err(), "Should fail with insufficient signatures");
 
     // Test with wrong function signature
-    let wrong_function_signatures = get_signatures(AttestorMultisigTx {
-        uuid: *uuid,
+    let wrong_function_signatures = get_signatures_from_request(AttestorMultisigTx {
+        uuid: uuid,
         btc_tx_id: BTC_TX_ID,
         tx_type: 'post-close-dlc',
         amount: VALUE_LOCKED
     }, attestors.span(), 3);
-
-    let result = ibtc_manager_safe.set_status_funded(*uuid, BTC_TX_ID, wrong_function_signatures, VALUE_LOCKED);
+    let result = ibtc_manager_safe.set_status_funded(uuid, BTC_TX_ID, VALUE_LOCKED, wrong_function_signatures);
     assert!(result.is_err(), "Should fail with wrong function signature");
 
     // Test with wrong UUID
-    let wrong_uuid = 0x96eecb386fb10e82f510aaf3e2b99f52f8dcba;
-    let wrong_uuid_signatures = get_signatures(AttestorMultisigTx {
-        uuid: wrong_uuid,
-        btc_tx_id: BTC_TX_ID,
-        tx_type: 'set-status-funded',
-        amount: VALUE_LOCKED
-    }, attestors.span(), 3);
+    let wrong_uuid_low = 91044518406403680085907560571636167243;
+    let wrong_uuid_high = 8805426864190065380747486608483342165;
+    let wrong_uuid = u256 { low: wrong_uuid_low.try_into().unwrap(), high: wrong_uuid_high.try_into().unwrap() };
+    let wrong_uuid_signatures = get_signatures_from_messages(get_ssf_messages(ibtc_manager, wrong_uuid, BTC_TX_ID, VALUE_LOCKED, array![attestor1, attestor2, attestor3]), attestors.span(), 3);
 
-    let result = ibtc_manager_safe.set_status_funded(*uuid, BTC_TX_ID, wrong_uuid_signatures, VALUE_LOCKED);
+    let result = ibtc_manager_safe.set_status_funded(uuid, BTC_TX_ID, VALUE_LOCKED, wrong_uuid_signatures);
     assert!(result.is_err(), "Should fail with wrong UUID");
 
     // Test with wrong BTC tx ID
-    let wrong_btc_tx_signatures = get_signatures(AttestorMultisigTx {
-        uuid: *uuid,
-        btc_tx_id: BTC_TX_ID2,
-        tx_type: 'set-status-funded',
-        amount: VALUE_LOCKED
-    }, attestors.span(), 3);
+    let wrong_btc_tx_signatures = get_signatures_from_messages(get_ssf_messages(ibtc_manager, uuid, BTC_TX_ID2, VALUE_LOCKED, array![attestor1, attestor2, attestor3]), attestors.span(), 3);
 
-    let result = ibtc_manager_safe.set_status_funded(*uuid, BTC_TX_ID, wrong_btc_tx_signatures, VALUE_LOCKED);
+    let result = ibtc_manager_safe.set_status_funded(uuid, BTC_TX_ID, VALUE_LOCKED, wrong_btc_tx_signatures);
     assert!(result.is_err(), "Should fail with wrong BTC tx ID");
 
     // Test successful funding
-    let valid_signatures = get_signatures(AttestorMultisigTx {
-        uuid: *uuid,
-        btc_tx_id: BTC_TX_ID,
-        tx_type: 'set-status-funded',
-        amount: VALUE_LOCKED
-    }, attestors.span(), 3);
+    let valid_signatures = get_signatures_from_messages(get_ssf_messages(ibtc_manager, uuid, BTC_TX_ID, VALUE_LOCKED, array![attestor1, attestor2, attestor3]), attestors.span(), 3);
 
     let mut spy = spy_events();
-    ibtc_manager.set_status_funded(*uuid, BTC_TX_ID, valid_signatures, VALUE_LOCKED);
+    ibtc_manager.set_status_funded(uuid, BTC_TX_ID, VALUE_LOCKED, valid_signatures);
 
     // Verify event was emitted
     let expected_event = IBTCManager::Event::SetStatusFunded(
         SetStatusFunded {
-            uuid: *uuid,
+            uuid: uuid,
             btc_tx_id: BTC_TX_ID,
             creator: user,
             new_value_locked: VALUE_LOCKED,
@@ -550,7 +544,9 @@ fn test_set_status_funded_duplicate_signers() {
     let mut spy = spy_events();
     ibtc_manager.setup_vault();
     let (_, event) = spy.get_events().events.at(1);
-    let uuid = event.data.at(0);
+    let uuid_low = event.data.at(0);
+    let uuid_high = event.data.at(1);
+    let uuid = u256 { low: (*uuid_low).try_into().unwrap(), high: (*uuid_high).try_into().unwrap() };
 
     // Setup attestors
     let key_pair_attestor1 = StarkCurveKeyPairImpl::generate();
@@ -566,28 +562,18 @@ fn test_set_status_funded_duplicate_signers() {
     ibtc_manager.grant_role(APPROVED_SIGNER, attestor1);
 
     // Set status to pending first with duplicate signatures
-    let pending_signatures = get_signatures(AttestorMultisigTx {
-        uuid: *uuid,
-        btc_tx_id: BTC_TX_ID,
-        tx_type: 'set-status-pending',
-        amount: 0
-    }, attestors.span(), 3);
+    let pending_signatures = get_signatures_from_messages(get_ssp_messages(ibtc_manager, uuid, BTC_TX_ID, 0, array![attestor1, attestor1, attestor1]), attestors.span(), 3);
 
     start_cheat_caller_address(ibtc_manager.contract_address, attestor1);
     let result = ibtc_manager_safe.set_status_pending(
-        *uuid, BTC_TX_ID, pending_signatures, mock_taproot_pubkey(), 0
+        uuid, BTC_TX_ID, mock_taproot_pubkey(), 0, pending_signatures
     );
     assert!(result.is_err(), "Should fail with duplicate signers");
 
     // Try to set funded status with duplicate signatures
-    let duplicate_signatures = get_signatures(AttestorMultisigTx {
-        uuid: *uuid,
-        btc_tx_id: BTC_TX_ID,
-        tx_type: 'set-status-funded',
-        amount: VALUE_LOCKED
-    }, attestors.span(), 3);
+    let duplicate_signatures = get_signatures_from_messages(get_ssf_messages(ibtc_manager, uuid, BTC_TX_ID, VALUE_LOCKED, array![attestor1, attestor1, attestor1]), attestors.span(), 3);
 
-    let result = ibtc_manager_safe.set_status_funded(*uuid, BTC_TX_ID, duplicate_signatures, VALUE_LOCKED);
+    let result = ibtc_manager_safe.set_status_funded(uuid, BTC_TX_ID, VALUE_LOCKED, duplicate_signatures);
     assert!(result.is_err(), "Should fail with duplicate signers");
 }
 
@@ -605,16 +591,18 @@ fn test_withdraw_half_locked_tokens() {
     let mut spy = spy_events();
     ibtc_manager.setup_vault();
     let (_, event) = spy.get_events().events.at(1);
-    let uuid = event.data.at(0);
+    let uuid_low = event.data.at(0);
+    let uuid_high = event.data.at(1);
+    let uuid = u256 { low: (*uuid_low).try_into().unwrap(), high: (*uuid_high).try_into().unwrap() };
 
-    setup_attestors_and_fund(ibtc_manager, *uuid, VALUE_LOCKED);
+    setup_attestors_and_fund(ibtc_manager, uuid, VALUE_LOCKED);
 
     // Withdraw half the tokens
     start_cheat_caller_address(ibtc_manager.contract_address, user);
-    ibtc_manager.withdraw(*uuid, VALUE_LOCKED / 2);
+    ibtc_manager.withdraw(uuid, VALUE_LOCKED / 2);
 
     // Check IBTCVault state
-    let vault = ibtc_manager.get_vault(*uuid);
+    let vault = ibtc_manager.get_vault(uuid);
     assert!(ibtc_token.balance_of(user) == VALUE_LOCKED / 2, "Wrong balance after withdraw");
     assert!(vault.value_minted == VALUE_LOCKED / 2, "Wrong value minted");
     assert!(vault.value_locked == VALUE_LOCKED, "Value locked should not change yet");
@@ -633,13 +621,15 @@ fn test_withdraw_and_redeem_bitcoin() {
     let mut spy = spy_events();
     ibtc_manager.setup_vault();
     let (_, event) = spy.get_events().events.at(1);
-    let uuid = event.data.at(0);
+    let uuid_low = event.data.at(0);
+    let uuid_high = event.data.at(1);
+    let uuid = u256 { low: (*uuid_low).try_into().unwrap(), high: (*uuid_high).try_into().unwrap() };
 
-    setup_attestors_and_fund(ibtc_manager, *uuid, VALUE_LOCKED);
+    setup_attestors_and_fund(ibtc_manager, uuid, VALUE_LOCKED);
 
     // Withdraw half the tokens
     start_cheat_caller_address(ibtc_manager.contract_address, user);
-    ibtc_manager.withdraw(*uuid, VALUE_LOCKED / 2);
+    ibtc_manager.withdraw(uuid, VALUE_LOCKED / 2);
 
     // Setup attestors and set new pending status for redemption
     let key_pair_attestor1 = StarkCurveKeyPairImpl::generate();
@@ -662,30 +652,20 @@ fn test_withdraw_and_redeem_bitcoin() {
         ibtc_manager.grant_role(APPROVED_SIGNER, *attestor);
     };
 
-    let pending_signatures = get_signatures(AttestorMultisigTx {
-        uuid: *uuid,
-        btc_tx_id: BTC_TX_ID,
-        tx_type: 'set-status-pending',
-        amount: 0
-    }, attestors.span(), 3);
+    let pending_signatures = get_signatures_from_messages(get_ssp_messages(ibtc_manager, uuid, BTC_TX_ID, 0, array![attestor1, attestor2, attestor3]), attestors.span(), 3);
 
     start_cheat_caller_address(ibtc_manager.contract_address, attestor1);
     ibtc_manager.set_status_pending(
-        *uuid, BTC_TX_ID, pending_signatures, mock_taproot_pubkey(), 0
+        uuid, BTC_TX_ID, mock_taproot_pubkey(), 0, pending_signatures
     );
 
     // Set new funded status with half the original amount
-    let funded_signatures = get_signatures(AttestorMultisigTx {
-        uuid: *uuid,
-        btc_tx_id: BTC_TX_ID,
-        tx_type: 'set-status-funded',
-        amount: VALUE_LOCKED / 2
-    }, attestors.span(), 3);
+    let funded_signatures = get_signatures_from_messages(get_ssf_messages(ibtc_manager, uuid, BTC_TX_ID, VALUE_LOCKED / 2, array![attestor1, attestor2, attestor3]), attestors.span(), 3);
 
-    ibtc_manager.set_status_funded(*uuid, BTC_TX_ID, funded_signatures, VALUE_LOCKED / 2);
+    ibtc_manager.set_status_funded(uuid, BTC_TX_ID, VALUE_LOCKED / 2, funded_signatures);
 
     // Check final state
-    let vault = ibtc_manager.get_vault(*uuid);
+    let vault = ibtc_manager.get_vault(uuid);
     assert!(ibtc_token.balance_of(user) == VALUE_LOCKED / 2, "Wrong final balance");
     assert!(vault.value_locked == VALUE_LOCKED / 2, "Wrong final locked value");
     assert!(vault.value_minted == VALUE_LOCKED / 2, "Wrong final minted value");
@@ -704,14 +684,16 @@ fn test_withdraw_redeem_too_much_bitcoin() {
     let mut spy = spy_events();
     ibtc_manager.setup_vault();
     let (_, event) = spy.get_events().events.at(1);
-    let uuid = event.data.at(0);
+    let uuid_low = event.data.at(0);
+    let uuid_high = event.data.at(1);
+    let uuid = u256 { low: (*uuid_low).try_into().unwrap(), high: (*uuid_high).try_into().unwrap() };
 
     // Fund the vault
-    setup_attestors_and_fund(ibtc_manager, *uuid, VALUE_LOCKED);
+    setup_attestors_and_fund(ibtc_manager, uuid, VALUE_LOCKED);
 
     // Withdraw half
     start_cheat_caller_address(ibtc_manager.contract_address, user);
-    ibtc_manager.withdraw(*uuid, VALUE_LOCKED / 2);
+    ibtc_manager.withdraw(uuid, VALUE_LOCKED / 2);
 
     // Setup attestors for redemption
     let key_pair_attestor1 = StarkCurveKeyPairImpl::generate();
@@ -735,28 +717,18 @@ fn test_withdraw_redeem_too_much_bitcoin() {
     };
 
     // Try to redeem more than withdrawn
-    let pending_signatures = get_signatures(AttestorMultisigTx {
-        uuid: *uuid,
-        btc_tx_id: BTC_TX_ID2,
-        tx_type: 'set-status-pending',
-        amount: 0
-    }, attestors.span(), 3);
+    let pending_signatures = get_signatures_from_messages(get_ssp_messages(ibtc_manager, uuid, BTC_TX_ID2, 0, array![attestor1, attestor2, attestor3]), attestors.span(), 3);
 
     start_cheat_caller_address(ibtc_manager.contract_address, attestor1);
     ibtc_manager.set_status_pending(
-        *uuid, BTC_TX_ID2, pending_signatures, mock_taproot_pubkey(), 0
+        uuid, BTC_TX_ID2, mock_taproot_pubkey(), 0, pending_signatures
     );
 
     // Try to set funded with less than required - this should panic
-    let funded_signatures = get_signatures(AttestorMultisigTx {
-        uuid: *uuid,
-        btc_tx_id: BTC_TX_ID2,
-        tx_type: 'set-status-funded',
-        amount: VALUE_LOCKED / 2 - 1
-    }, attestors.span(), 3);
+    let funded_signatures = get_signatures_from_messages(get_ssf_messages(ibtc_manager, uuid, BTC_TX_ID2, VALUE_LOCKED / 2 - 1, array![attestor1, attestor2, attestor3]), attestors.span(), 3);
 
     // This call should panic with 'Under collateralized'
-    let result = ibtc_manager_safe.set_status_funded(*uuid, BTC_TX_ID2, funded_signatures, VALUE_LOCKED / 2 - 1);
+    let result = ibtc_manager_safe.set_status_funded(uuid, BTC_TX_ID2, VALUE_LOCKED / 2 - 1, funded_signatures);
     match result {
         Result::Err(error) => {
             assert!(*error.at(0) == IBTCManager::Errors::UNDER_COLLATERALIZED, "Should fail with under collateralized error");
@@ -780,13 +752,15 @@ fn test_deposit_more_bitcoin() {
     let mut spy = spy_events();
     ibtc_manager.setup_vault();
     let (_, event) = spy.get_events().events.at(1);
-    let uuid = event.data.at(0);
+    let uuid_low = event.data.at(0);
+    let uuid_high = event.data.at(1);
+    let uuid = u256 { low: (*uuid_low).try_into().unwrap(), high: (*uuid_high).try_into().unwrap() };
 
     // Fund initial amount
-    setup_attestors_and_fund(ibtc_manager, *uuid, VALUE_LOCKED);
+    setup_attestors_and_fund(ibtc_manager, uuid, VALUE_LOCKED);
 
     // Add more bitcoin
-    let new_amount = VALUE_LOCKED + VALUE_LOCKED / 2;
+    let new_amount: u256 = VALUE_LOCKED + VALUE_LOCKED / 2;
     
     // Setup attestors for additional deposit
     let key_pair_attestor1 = StarkCurveKeyPairImpl::generate();
@@ -809,29 +783,19 @@ fn test_deposit_more_bitcoin() {
         ibtc_manager.grant_role(APPROVED_SIGNER, *attestor);
     };
 
-    let pending_signatures = get_signatures(AttestorMultisigTx {
-        uuid: *uuid,
-        btc_tx_id: BTC_TX_ID2,
-        tx_type: 'set-status-pending',
-        amount: 0
-    }, attestors.span(), 3);
+    let pending_signatures = get_signatures_from_messages(get_ssp_messages(ibtc_manager, uuid, BTC_TX_ID2, 0, array![attestor1, attestor2, attestor3]), attestors.span(), 3);
 
     start_cheat_caller_address(ibtc_manager.contract_address, attestor1);
     ibtc_manager.set_status_pending(
-        *uuid, BTC_TX_ID2, pending_signatures, mock_taproot_pubkey(), 0
+        uuid, BTC_TX_ID2, mock_taproot_pubkey(), 0, pending_signatures
     );
 
-    let funded_signatures = get_signatures(AttestorMultisigTx {
-        uuid: *uuid,
-        btc_tx_id: BTC_TX_ID2,
-        tx_type: 'set-status-funded',
-        amount: new_amount
-    }, attestors.span(), 3);
+    let funded_signatures = get_signatures_from_messages(get_ssf_messages(ibtc_manager, uuid, BTC_TX_ID2, new_amount, array![attestor1, attestor2, attestor3]), attestors.span(), 3);
 
-    ibtc_manager.set_status_funded(*uuid, BTC_TX_ID2, funded_signatures, new_amount);
+    ibtc_manager.set_status_funded(uuid, BTC_TX_ID2, new_amount, funded_signatures);
 
     // Check final state
-    let vault = ibtc_manager.get_vault(*uuid);
+    let vault = ibtc_manager.get_vault(uuid);
     assert!(ibtc_token.balance_of(user) == new_amount, "Wrong balance after deposit");
     assert!(vault.value_locked == new_amount, "Wrong locked value");
     assert!(vault.value_minted == new_amount, "Wrong minted value");
@@ -850,8 +814,10 @@ fn test_deposit_too_much_bitcoin() {
     let mut spy = spy_events();
     ibtc_manager.setup_vault();
     let (_, event) = spy.get_events().events.at(1);
-    let uuid = event.data.at(0);
-    setup_attestors_and_fund(ibtc_manager, *uuid, VALUE_LOCKED);
+    let uuid_low = event.data.at(0);
+    let uuid_high = event.data.at(1);
+    let uuid = u256 { low: (*uuid_low).try_into().unwrap(), high: (*uuid_high).try_into().unwrap() };
+    setup_attestors_and_fund(ibtc_manager, uuid, VALUE_LOCKED);
 
     // Try to deposit too much
     let too_much = VALUE_LOCKED * 100;
@@ -877,26 +843,17 @@ fn test_deposit_too_much_bitcoin() {
         ibtc_manager.grant_role(APPROVED_SIGNER, *attestor);
     };
 
-    let pending_signatures = get_signatures(AttestorMultisigTx {
-        uuid: *uuid,
-        btc_tx_id: BTC_TX_ID2,
-        tx_type: 'set-status-pending',
-        amount: 0
-    }, attestors.span(), 3);
+    let pending_signatures = get_signatures_from_messages(get_ssp_messages(ibtc_manager, uuid, BTC_TX_ID2, 0, array![attestor1, attestor2, attestor3]), attestors.span(), 3);
+
 
     start_cheat_caller_address(ibtc_manager.contract_address, attestor1);
     ibtc_manager.set_status_pending(
-        *uuid, BTC_TX_ID2, pending_signatures, mock_taproot_pubkey(), 0
+        uuid, BTC_TX_ID2, mock_taproot_pubkey(), 0, pending_signatures
     );
 
-    let funded_signatures = get_signatures(AttestorMultisigTx {
-        uuid: *uuid,
-        btc_tx_id: BTC_TX_ID2,
-        tx_type: 'set-status-funded',
-        amount: too_much
-    }, attestors.span(), 3);
+    let funded_signatures = get_signatures_from_messages(get_ssf_messages(ibtc_manager, uuid, BTC_TX_ID2, too_much, array![attestor1, attestor2, attestor3]), attestors.span(), 3);
 
-    let result = ibtc_manager_safe.set_status_funded(*uuid, BTC_TX_ID2, funded_signatures, too_much);
+    let result = ibtc_manager_safe.set_status_funded(uuid, BTC_TX_ID2, too_much, funded_signatures);
     match result {
         Result::Err(error) => {
             assert!(*error.at(0) == IBTCManager::Errors::DEPOSIT_TOO_LARGE, "Deposit too large should fail");

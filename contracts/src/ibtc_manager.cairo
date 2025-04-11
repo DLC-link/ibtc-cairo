@@ -18,7 +18,7 @@ pub mod IBTCManager {
     use core::panic_with_felt252;
     use core::poseidon::poseidon_hash_span;
     use core::starknet::contract_address_to_felt252;
-    use crate::event::{CreateIBTCVault, SetStatusFunded, SetStatusPending, Withdraw, SetThreshold, Mint, Burn, WhitelistAddress, UnwhitelistAddress, SetMinimumDeposit, SetMaximumDeposit, SetBtcMintFeeRate, SetBtcRedeemFeeRate, SetBtcFeeRecipient, SetWhitelistingEnabled, TransferTokenContractOwnership, SetPorEnabled, SetIBtcPorFeed, GrantSignerRole, RevokeSignerRole};
+    use crate::event::{CreateIBTCVault, SetStatusFunded, SetStatusPending, Withdraw, SetThreshold, Mint, Burn, WhitelistAddress, UnwhitelistAddress, SetMinimumDeposit, SetMaximumDeposit, SetBtcMintFeeRate, SetBtcRedeemFeeRate, SetBtcFeeRecipient, SetApprovedSigners, SetWhitelistingEnabled, TransferTokenContractOwnership, SetPorEnabled, SetIBtcPorFeed, GrantSignerRole, RevokeSignerRole};
     
     use starknet::storage::{Mutable, MutableVecTrait, StorageAsPath, StoragePath, Vec, VecTrait};
     use starknet::storage::{Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePathEntry};
@@ -35,6 +35,9 @@ pub mod IBTCManager {
     use starknet::info::{get_block_number};
     use starknet::syscalls::get_block_hash_syscall;
     use starknet::{SyscallResult, SyscallResultTrait, ContractAddress};
+    use core::poseidon::PoseidonTrait;
+    use core::hash::{HashStateTrait, HashStateExTrait};
+
     use starknet::info::get_block_info;
 
     use crate::utils::{AttestorMultisigTx, OffChainMessageHashAttestorMultisigTx};
@@ -80,15 +83,15 @@ pub mod IBTCManager {
         whitelisted_addresses: Map<ContractAddress, bool>,
         btc_mint_fee_rate: u16,
         btc_redeem_fee_rate: u16,
-        btc_fee_recipient: felt252,
+        btc_fee_recipient: ByteArray,
         seen_signers: Map<(ContractAddress, felt252), bool>,
         ibtc_vaults: Map<u128, IBTCVault>,
-        ibtc_vault_ids_by_uuid: Map<felt252, u128>,
-        user_vaults: Map<ContractAddress, Vec<felt252>>,
+        ibtc_vault_ids_by_uuid: Map<u256, u128>,
+        user_vaults: Map<ContractAddress, Vec<u256>>,
         signer_count: u16,
         por_enabled: bool,
         total_value_minted: u256,
-        attestor_group_pubkey: felt252,
+        attestor_group_pubkey: ByteArray,
         ibtc_por_feed: ContractAddress,
     }
 
@@ -96,6 +99,7 @@ pub mod IBTCManager {
     pub struct Debug {
         message: felt252,
     }
+
 
     // Define events
     #[event]
@@ -123,6 +127,7 @@ pub mod IBTCManager {
         SetBtcMintFeeRate: SetBtcMintFeeRate,
         SetBtcRedeemFeeRate: SetBtcRedeemFeeRate,
         SetBtcFeeRecipient: SetBtcFeeRecipient,
+        SetApprovedSigners: SetApprovedSigners,
         SetWhitelistingEnabled: SetWhitelistingEnabled,
         TransferTokenContractOwnership: TransferTokenContractOwnership,
         SetPorEnabled: SetPorEnabled,
@@ -155,6 +160,7 @@ pub mod IBTCManager {
         pub const NO_SIGNER_RENOUNCEMENT: felt252 = 'No signer renouncement';
         pub const INVALID_SIGNATURE_LENGTH: felt252 = 'Invalid signature length';
         pub const INVALID_SIGNATURE: felt252 = 'Invalid signature';
+        pub const INVALID_SIGNATURE_TYPE: felt252 = 'Invalid signature type';
     }
 
     // Constructor to initialize roles and other settings
@@ -165,7 +171,8 @@ pub mod IBTCManager {
         ibtc_admin_role: ContractAddress,
         threshold: u16,
         token_contract: ContractAddress,
-        btc_fee_recipient_to_set: felt252,
+        btc_fee_recipient_to_set: ByteArray,
+        whitelisting_enabled: bool,
     ) {
         self.accesscontrol.initializer();
         // Grant roles
@@ -177,18 +184,19 @@ pub mod IBTCManager {
         self.accesscontrol.set_role_admin(APPROVED_SIGNER, DEFAULT_ADMIN_ROLE);
 
         // Set thresholds
-        self.minimum_threshold.write(2);
+        self.minimum_threshold.write(1);
         if threshold < self.minimum_threshold.read() {
             panic_with_felt252(Errors::THRESHOLD_TOO_LOW);
         }
         self.threshold.write(threshold);
+        
         // Initialize other storage variables
         self.index.write(0);
         self.tss_commitment.write(0);
         self.ibtc_token.write(token_contract);
         self.minimum_deposit.write(1_000_000_u256); // 0.01 BTC
         self.maximum_deposit.write(500_000_000_u256); // 5 BTC
-        self.whitelisting_enabled.write(true);
+        self.whitelisting_enabled.write(whitelisting_enabled);
         self.btc_mint_fee_rate.write(12); // 0.12% BTC fee
         self.btc_redeem_fee_rate.write(15); // 0.15% BTC fee
         self.btc_fee_recipient.write(btc_fee_recipient_to_set);
@@ -223,7 +231,7 @@ pub mod IBTCManager {
             sender: ContractAddress,
             nonce: u128,
             previous_block_hash: felt252
-        ) -> felt252 {
+        ) -> u256 {
             // Retrieve the current chain ID
             let chain_id = get_execution_info().tx_info.chain_id;
         
@@ -235,29 +243,39 @@ pub mod IBTCManager {
                 chain_id,
             ];
         
-            // Compute the Poseidon hash over the data array
-            poseidon_hash_span(data.span())
+            let hash1 = poseidon_hash_span(data.span());
+            let uuid: u256 = hash1.into();
+            uuid
         }
 
         fn _attestor_multisig_is_valid(
             ref self: ContractState,
-            message: AttestorMultisigTx,
+            uuid: u256,
+            btc_tx_id: u256,
+            tx_type: felt252,
+            amount: u256,
             signatures: Span<(ContractAddress, Array<felt252>)>
         ) {
             let threshold = self.threshold.read();
             assert(signatures.len() >= threshold.into(), Errors::NOT_ENOUGH_SIGNATURES);
             for (attestor, signature) in signatures {
-                let message_hash = message.get_message_hash(*attestor);
+                let message = if tx_type == 'set-status-funded' {
+                    self.get_ssf_message(*attestor, uuid, btc_tx_id, amount)
+                } else if tx_type == 'set-status-pending' {
+                    self.get_ssp_message(*attestor, uuid, btc_tx_id, amount)
+                } else {
+                    panic_with_felt252(Errors::INVALID_SIGNATURE_TYPE);
+                    0 // Unreachable but needed for type checking
+                };
                 let valid_length = signature.len() == 2;
                 if !valid_length {
                     panic_with_felt252(Errors::INVALID_SIGNATURE_LENGTH);
                 }
                 let is_valid_signature = IAccountDispatcher { contract_address: *attestor }
-                    .is_valid_signature(message_hash, signature.clone());
-                // println!("is_valid_signature: {:?}", is_valid_signature);
+                    .is_valid_signature(message, signature.clone());
                 assert(is_valid_signature == 'VALID', Errors::INVALID_SIGNATURE);
                 assert(self.accesscontrol.has_role(APPROVED_SIGNER, *attestor), Errors::INVALID_SIGNER);
-                self._check_signer_unique(*attestor, message_hash);
+                self._check_signer_unique(*attestor, message);
             }
         }
 
@@ -300,7 +318,7 @@ pub mod IBTCManager {
             }
         }
 
-        fn _only_vault_creator(self: @ContractState, uuid: felt252) {
+        fn _only_vault_creator(self: @ContractState, uuid: u256) {
             let ibtc_idx = self.ibtc_vault_ids_by_uuid.read(uuid);
             let ibtc = self.ibtc_vaults.read(ibtc_idx);
             let creator = ibtc.creator;
@@ -317,7 +335,7 @@ pub mod IBTCManager {
         fn _check_mint(self: @ContractState, amount: u256, current_total_minted: u256) -> bool {
             if amount == 0 {
                 return false;
-            }
+        }
 
             let proposed_total_value_minted = current_total_minted + amount;
             self._check_por(proposed_total_value_minted)
@@ -349,7 +367,7 @@ pub mod IBTCManager {
         }
 
         #[external(v0)]
-        fn setup_vault(ref self: ContractState) -> felt252 {
+        fn setup_vault(ref self: ContractState) -> u256 {
             self.pausable.assert_not_paused();
             self._only_whitelisted();
 
@@ -364,14 +382,13 @@ pub mod IBTCManager {
                 status: IBTCVaultStatus::READY.into(),
                 funding_tx_id: 0.into(),
                 closing_tx_id: 0.into(),
-                btc_fee_recipient: 0.into(),
-                btc_mint_fee_basis_points: 0,
-                btc_redeem_fee_basis_points: 0,
+                btc_fee_recipient: self.btc_fee_recipient.read().into(),
+                btc_mint_fee_basis_points: self.btc_mint_fee_rate.read().into(),
+                btc_redeem_fee_basis_points: self.btc_redeem_fee_rate.read().into(),
                 taproot_pubkey: "",
                 wd_tx_id: 0.into(),
             };
             self.ibtc_vaults.write(self.index.read(), ibtc);
-            // println!("new uuid: {:?}", _uuid);
 
             self.emit(CreateIBTCVault{uuid: _uuid, creator: get_caller_address(), timestamp: get_block_info().block_timestamp});
 
@@ -383,17 +400,36 @@ pub mod IBTCManager {
         }
 
         #[external(v0)]
-        fn set_status_funded(ref self: ContractState, uuid: felt252, btc_tx_id: u256, signatures: Span<(ContractAddress, Array<felt252>)>, new_value_locked: u256) {
-            self.pausable.assert_not_paused();
-            self.accesscontrol.assert_only_role(APPROVED_SIGNER);
-
+        fn get_ssf_message(ref self: ContractState, attestor: ContractAddress, uuid: u256, btc_tx_id: u256, new_value_locked: u256) -> felt252 {
             let message = AttestorMultisigTx {
                 uuid,
                 btc_tx_id,
                 tx_type: 'set-status-funded',
                 amount: new_value_locked,
             };
-            self._attestor_multisig_is_valid(message, signatures);
+
+            message.get_message_hash(attestor)
+        }
+
+        #[external(v0)]
+        fn get_ssp_message(ref self: ContractState, attestor: ContractAddress, uuid: u256, wdtx_id: u256, new_value_locked: u256) -> felt252 {
+            let message = AttestorMultisigTx {
+                uuid,
+                btc_tx_id: wdtx_id,
+                tx_type: 'set-status-pending',
+                amount: new_value_locked,
+            };
+
+            let message_hash = message.get_message_hash(attestor);
+            message_hash
+        }
+
+        #[external(v0)]
+        fn set_status_funded(ref self: ContractState, uuid: u256, btc_tx_id: u256, new_value_locked: u256, signatures: Span<(ContractAddress, Array<felt252>)>) {
+            self.pausable.assert_not_paused();
+            self.accesscontrol.assert_only_role(APPROVED_SIGNER);
+
+            self._attestor_multisig_is_valid(uuid, btc_tx_id, 'set-status-funded', new_value_locked, signatures);
 
             let ibtc_idx = self.ibtc_vault_ids_by_uuid.entry(uuid).read();
             let mut ibtc = self.ibtc_vaults.entry(ibtc_idx).read();
@@ -441,17 +477,11 @@ pub mod IBTCManager {
         }
 
         #[external(v0)]
-        fn set_status_pending(ref self: ContractState, uuid: felt252, wdtx_id: u256, signatures: Span<(ContractAddress, Array<felt252>)>, taproot_pubkey: ByteArray, new_value_locked: u256) {
+        fn set_status_pending(ref self: ContractState, uuid: u256, wdtx_id: u256, taproot_pubkey: ByteArray, new_value_locked: u256, signatures: Span<(ContractAddress, Array<felt252>)>) {
             self.pausable.assert_not_paused();
             self.accesscontrol.assert_only_role(APPROVED_SIGNER);
-
-            let message = AttestorMultisigTx {
-                uuid,
-                btc_tx_id: wdtx_id,
-                tx_type: 'set-status-pending',
-                amount: new_value_locked,
-            };
-            self._attestor_multisig_is_valid(message, signatures);
+            
+            self._attestor_multisig_is_valid(uuid, wdtx_id, 'set-status-pending', new_value_locked, signatures);
 
             let ibtc_vault_idx = self.ibtc_vault_ids_by_uuid.entry(uuid).read();
             let mut ibtc_vault = self.ibtc_vaults.entry(ibtc_vault_idx).read();
@@ -473,8 +503,9 @@ pub mod IBTCManager {
             self.emit(SetStatusPending{uuid, btc_tx_id: wdtx_id, creator, taproot_pubkey, new_value_locked});
         }
 
+
         #[external(v0)]
-        fn withdraw(ref self: ContractState, uuid: felt252, amount: u256) {
+        fn withdraw(ref self: ContractState, uuid: u256, amount: u256) {
             self._only_vault_creator(uuid);
             self.pausable.assert_not_paused();
             
@@ -507,7 +538,7 @@ pub mod IBTCManager {
         }
 
         #[external(v0)]
-        fn get_ibtc_vault(self: @ContractState, uuid: felt252) -> IBTCVault {
+        fn get_ibtc_vault(self: @ContractState, uuid: u256) -> IBTCVault {
             let ibtc_vault_idx = self.ibtc_vault_ids_by_uuid.read(uuid);
             let ibtc_vault = self.ibtc_vaults.read(ibtc_vault_idx);
             if (ibtc_vault.uuid == 0 || ibtc_vault.uuid != uuid) {
@@ -534,12 +565,12 @@ pub mod IBTCManager {
         }
 
         #[external(v0)]
-        fn get_vault(self: @ContractState, uuid: felt252) -> IBTCVault {
+        fn get_vault(self: @ContractState, uuid: u256) -> IBTCVault {
             self.get_ibtc_vault(uuid)
         }
 
         #[external(v0)]
-        fn get_all_vault_uuids_for_address(self: @ContractState, owner: ContractAddress) -> Array<felt252> {
+        fn get_all_vault_uuids_for_address(self: @ContractState, owner: ContractAddress) -> Array<u256> {
             let mut vault_ids = array![];
             for i in 0..self.user_vaults.entry(owner).len() {
                 vault_ids.append(self.user_vaults.entry(owner).at(i).read());
@@ -558,7 +589,7 @@ pub mod IBTCManager {
         }
 
         #[external(v0)]
-        fn get_user_vaults(self: @ContractState, owner: ContractAddress) -> Span<felt252> {
+        fn get_user_vaults(self: @ContractState, owner: ContractAddress) -> Span<u256> {
             let mut uuids = array![];
             for i in 0..self.user_vaults.entry(owner).len() {
                 uuids.append(self.user_vaults.entry(owner).at(i).read());
@@ -602,8 +633,13 @@ pub mod IBTCManager {
         }
 
         #[external(v0)]
-        fn get_btc_fee_recipient(self: @ContractState) -> felt252 {
+        fn get_btc_fee_recipient(self: @ContractState) -> ByteArray {
             self.btc_fee_recipient.read()
+        }
+
+        #[external(v0)]
+        fn get_attestor_group_pubkey(self: @ContractState) -> ByteArray {
+            self.attestor_group_pubkey.read()
         }
 
         #[external(v0)]
@@ -639,7 +675,7 @@ pub mod IBTCManager {
         }
 
         #[external(v0)]
-        fn set_attestor_group_pubkey(ref self: ContractState, pubkey: felt252) {
+        fn set_attestor_group_pubkey(ref self: ContractState, pubkey: ByteArray) {
             self.accesscontrol.assert_only_role(IBTC_ADMIN_ROLE);
             self.attestor_group_pubkey.write(pubkey);
         }
@@ -687,14 +723,33 @@ pub mod IBTCManager {
         }
 
         #[external(v0)]
-        fn set_btc_fee_recipient(ref self: ContractState, recipient: felt252) {
+        fn set_btc_fee_recipient(ref self: ContractState, recipient: ByteArray) {
             self.accesscontrol.assert_only_role(IBTC_ADMIN_ROLE);
+            let recipient_clone = recipient.clone();
             self.btc_fee_recipient.write(recipient);
-            self.emit(SetBtcFeeRecipient{btc_fee_recipient: recipient});
+            self.emit(SetBtcFeeRecipient{btc_fee_recipient: recipient_clone});
         }
 
         #[external(v0)]
-        fn set_btc_fee_recipient_for_vault(ref self: ContractState, uuid: felt252, recipient: felt252) {
+        fn set_approved_signers(ref self: ContractState, signers: Array<ContractAddress>) {
+            self.accesscontrol.assert_only_role(IBTC_ADMIN_ROLE);
+
+            let signers_len = signers.len();
+            let mut i: usize = 0;
+            loop {
+                if i >= signers_len {
+                    break;
+                }
+                let signer = signers.at(i);
+                self.accesscontrol._grant_role(APPROVED_SIGNER, *signer);
+                i += 1;
+            };
+            self.signer_count.write(signers_len.try_into().unwrap());
+            self.emit(SetApprovedSigners{signers});
+        }
+
+        #[external(v0)]
+        fn set_btc_fee_recipient_for_vault(ref self: ContractState, uuid: u256, recipient: ByteArray) {
             self.accesscontrol.assert_only_role(IBTC_ADMIN_ROLE);
             let ibtc_idx = self.ibtc_vault_ids_by_uuid.entry(uuid).read();
             let mut ibtc = self.ibtc_vaults.entry(ibtc_idx).read();

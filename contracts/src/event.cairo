@@ -3,14 +3,14 @@ use starknet::eth_address::EthAddress;
 
 #[derive(Drop, starknet::Event)]
 pub struct CreateIBTCVault {
-    uuid: felt252,
+    uuid: u256,
     creator: ContractAddress,
     timestamp: u64,
 }
 
 #[derive(Drop, starknet::Event)]
 pub struct SetStatusFunded {
-    uuid: felt252,
+    uuid: u256,
     btc_tx_id: u256,
     creator: ContractAddress,
     new_value_locked: u256,
@@ -19,7 +19,7 @@ pub struct SetStatusFunded {
 
 #[derive(Drop, starknet::Event)]
 pub struct SetStatusPending {
-    uuid: felt252,
+    uuid: u256,
     btc_tx_id: u256,
     creator: ContractAddress,
     taproot_pubkey: ByteArray,
@@ -28,7 +28,7 @@ pub struct SetStatusPending {
 
 #[derive(Drop, starknet::Event)]
 pub struct Withdraw {
-    uuid: felt252,
+    uuid: u256,
     amount: u256,
     sender: ContractAddress,
 }
@@ -82,7 +82,12 @@ pub struct SetBtcRedeemFeeRate {
 
 #[derive(Drop, starknet::Event)]
 pub struct SetBtcFeeRecipient {
-    btc_fee_recipient: felt252,
+    btc_fee_recipient: ByteArray,
+}
+
+#[derive(Drop, starknet::Event)]
+pub struct SetApprovedSigners {
+    signers: Array<ContractAddress>,
 }
 
 #[derive(Drop, starknet::Event)]

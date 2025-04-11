@@ -43,13 +43,13 @@ const STARKNET_DOMAIN_TYPE_HASH: felt252 =
     );
 
 const ATTESTOR_MULTISIG_STRUCT_TYPE_HASH: felt252 =
-    selector!("\"AttestorMultisigTx\"(\"uuid\":\"felt\",\"btc_tx_id\":\"u256\",\"tx_type\":\"felt\",\"amount\":\"u256\")\"u256\"(\"low\":\"u128\",\"high\":\"u128\")");
+    selector!("\"AttestorMultisigTx\"(\"uuid\":\"u256\",\"btc_tx_id\":\"u256\",\"tx_type\":\"felt\",\"amount\":\"u256\")\"u256\"(\"low\":\"u128\",\"high\":\"u128\")");
 
 const U256_TYPE_HASH: felt252 = selector!("\"u256\"(\"low\":\"u128\",\"high\":\"u128\")");
 
 #[derive(Drop, Copy, Hash)]
 pub struct AttestorMultisigTx {
-    uuid: felt252,
+    uuid: u256,
     btc_tx_id: u256,
     tx_type: felt252,
     amount: u256,
@@ -75,7 +75,7 @@ impl StructHashAttestorMultisigTx of IStructHash<AttestorMultisigTx> {
     fn get_struct_hash(self: @AttestorMultisigTx) -> felt252 {
         let mut state = PoseidonTrait::new();
         state = state.update_with(ATTESTOR_MULTISIG_STRUCT_TYPE_HASH);
-        state = state.update_with(*self.uuid);
+        state = state.update_with(self.uuid.get_struct_hash());
         state = state.update_with(self.btc_tx_id.get_struct_hash());
         state = state.update_with(*self.tx_type);
         state = state.update_with(self.amount.get_struct_hash());

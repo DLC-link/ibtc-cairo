@@ -53,7 +53,7 @@ pub impl IBTCVaultStatusIntoU8 of Into<IBTCVaultStatus, u8> {
 // Define the IBTCVault struct
 #[derive(Serde, Drop, starknet::Store, Debug)]
 pub struct IBTCVault {
-    uuid: felt252,
+    uuid: u256,
     protocol_contract: ContractAddress,
     timestamp: u64,
     value_locked: u256,
@@ -61,7 +61,7 @@ pub struct IBTCVault {
     status: u8,
     funding_tx_id: u256,
     closing_tx_id: u256,
-    btc_fee_recipient: felt252,
+    btc_fee_recipient: ByteArray,
     btc_mint_fee_basis_points: u64,
     btc_redeem_fee_basis_points: u64,
     taproot_pubkey: ByteArray,
